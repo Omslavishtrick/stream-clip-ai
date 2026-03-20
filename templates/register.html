@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Register - Stream Clip AI</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #111827;
+            color: white;
+            margin: 0;
+            padding: 0;
+        }
+        .container {
+            max-width: 420px;
+            margin: 80px auto;
+            background: #1f2937;
+            padding: 30px;
+            border-radius: 16px;
+        }
+        input {
+            width: 100%;
+            padding: 12px;
+            margin-top: 8px;
+            margin-bottom: 16px;
+            border: none;
+            border-radius: 10px;
+            box-sizing: border-box;
+        }
+        button {
+            width: 100%;
+            padding: 12px;
+            border: none;
+            border-radius: 10px;
+            background: #2563eb;
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        a { color: #93c5fd; }
+        .flash {
+            background: #7f1d1d;
+            padding: 10px;
+            border-radius: 10px;
+            margin-bottom: 16px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Create Account</h1>
+
+        {% with messages = get_flashed_messages() %}
+          {% if messages %}
+            {% for message in messages %}
+              <div class="flash">{{ message }}</div>
+            {% endfor %}
+          {% endif %}
+        {% endwith %}
+        
+    <div>
+    <img src="{{ url_for('static', filename='images/logo.png') }}" width="100">
+    <h2>LI3Media</h2>
+    </div>
+
+        <form method="POST">
+            <label>Username</label>
+            <input type="text" name="username" required>
+
+            <input type="email" name="email" placeholder="Email" required>
+
+            <label>Password</label>
+            <input type="password" name="password" required>
+
+            <button type="submit">Create Account</button>
+        </form>
+
+        <p style="margin-top:16px;">
+            Already have an account? <a href="/login">Log in</a>
+        </p>
+    </div>
+</body>
+</html>

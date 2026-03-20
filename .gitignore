@@ -1,0 +1,8 @@
+users.db
+uploads/
+outputs/
+.vscode/
+__pycache__/
+*.pyc
+clip.mp4
+Video.mp4

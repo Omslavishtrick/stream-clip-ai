@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stream Clip AI</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 900px;
+            margin: 40px auto;
+            padding: 20px;
+            background: #f7f7f7;
+        }
+
+        .card {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+            margin-bottom: 20px;
+        }
+
+        h1, h2 {
+            margin-top: 0;
+        }
+
+        button {
+            background: #4f46e5;
+            color: white;
+            border: none;
+            padding: 12px 18px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+
+        button:hover {
+            background: #4338ca;
+        }
+
+        button:disabled {
+            background: gray;
+            cursor: not-allowed;
+        }
+
+        input[type="file"],
+        input[type="number"] {
+            margin-top: 10px;
+            margin-bottom: 15px;
+            display: block;
+        }
+
+        .premium-badge {
+            display: inline-block;
+            background: gold;
+            color: black;
+            padding: 6px 10px;
+            border-radius: 999px;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+
+        .free-badge {
+            display: inline-block;
+            background: #ddd;
+            color: black;
+            padding: 6px 10px;
+            border-radius: 999px;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+
+        .message {
+            margin-top: 15px;
+            font-weight: bold;
+        }
+
+        .error {
+            color: red;
+        }
+
+        .success {
+            color: green;
+        }
+
+        ul {
+            padding-left: 20px;
+        }
+
+        a {
+            color: #2563eb;
+        }
+        .spinner {
+    width: 20px;
+    height: 20px;
+    border: 3px solid #ddd;
+    border-top: 3px solid #4f46e5;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>
+            Welcome, {{ username }}
+            {% if plan == "premium" %}
+                <span class="premium-badge">Premium</span>
+            {% else %}
+                <span class="free-badge">Free</span>
+            {% endif %}
+        </h1>
+
+        <p>Create highlight clips from your streams.</p>
+
+        {% if plan != "premium" %}
+            <button id="upgradeBtn">Upgrade to Premium</button>
+            <p id="upgradeMessage" class="message"></p>
+        {% else %}
+            <p class="success">Your account has Premium access.</p>
+        {% endif %}
+
+        <p>
+            <a href="/logout">Logout</a>
+        </p>
+    </div>
+
+    <div class="card">
+        <h2>Upload Video</h2>
+
+        <form id="uploadForm">
+            <label for="video">Choose video:</label>
+            <input type="file" id="video" name="video" accept="video/*" required>
+
+            <label for="clip_limit">How many clips do you want?</label>
+            <input type="number" id="clip_limit" name="clip_limit" min="1" max="20" value="3">
+
+            <button type="submit">Upload and Process</button>
+        </form>
+
+        <p id="uploadMessage" class="message"></p>
+    </div>
+
+    <div class="card">
+        <h2>Results</h2>
+        <div id="results"></div>
+    </div>
+
+    <script>
+    const upgradeBtn = document.getElementById("upgradeBtn");
+    const upgradeMessage = document.getElementById("upgradeMessage");
+    const uploadForm = document.getElementById("uploadForm");
+    const uploadMessage = document.getElementById("uploadMessage");
+    const resultsDiv = document.getElementById("results");
+
+    if (upgradeBtn) {
+        upgradeBtn.addEventListener("click", async function () {
+            upgradeBtn.disabled = true;
+            upgradeMessage.textContent = "Opening secure checkout...";
+            upgradeMessage.className = "message";
+
+            const response = await fetch("/upgrade", { method: "POST" });
+            const data = await response.json();
+
+            if (data.checkout_url) {
+                window.location.href = data.checkout_url;
+            } else {
+                upgradeMessage.textContent = "Upgrade failed.";
+                upgradeMessage.className = "message error";
+                upgradeBtn.disabled = false;
+            }
+        });
+    }
+
+    uploadForm.addEventListener("submit", async function (event) {
+        event.preventDefault();
+
+        uploadMessage.innerHTML = `
+            <div style="display:flex;align-items:center;gap:10px;">
+                <div class="spinner"></div>
+                Processing your video... this may take a minute
+            </div>
+        `;
+        uploadMessage.className = "message";
+
+        resultsDiv.innerHTML = "";
+
+        const formData = new FormData(uploadForm);
+
+        try {
+            const response = await fetch("/upload", {
+                method: "POST",
+                body: formData
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                uploadMessage.textContent = data.error || "Upload failed.";
+                uploadMessage.className = "message error";
+                return;
+            }
+
+            uploadMessage.textContent = "✅ Done! Your clips are ready.";
+            uploadMessage.className = "message success";
+
+            let html = `
+    <p><strong>Plan:</strong> ${data.plan}</p>
+    <p><strong>Uploads left:</strong> ${data.uploads_left_today}</p>
+    <p><strong>Allowed clip limit:</strong> ${data.allowed_clip_limit}</p>
+`;
+
+if (data.results && data.results.clips && data.results.clips.length > 0) {
+    html += `<h3>Your Clips</h3><div style="display:grid;gap:15px;">`;
+
+    for (const clip of data.results.clips) {
+        html += `
+            <div style="
+                padding:15px;
+                border-radius:10px;
+                background:#f9fafb;
+                border:1px solid #eee;
+            ">
+                <strong>Clip ${clip.clip_number}</strong><br>
+                ⏱ ${clip.start_time}s → ${clip.end_time}s<br><br>
+                <a href="${clip.download_url}">
+                    <button type="button">Download Clip</button>
+                </a>
+            </div>
+        `;
+    }
+
+    html += "</div>";
+} else {
+    html += "<p>No clips were found.</p>";
+}
+
+            resultsDiv.innerHTML = html;
+
+        } catch (err) {
+            uploadMessage.textContent = "Something went wrong.";
+            uploadMessage.className = "message error";
+        }
+    });
+    </script>
+</body>
+</html>
