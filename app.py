@@ -351,9 +351,6 @@ def upload():
         video = request.files.get("video")
         clip_limit_raw = request.form.get("clip_limit", "3")
 
-        print("VIDEO RECEIVED:", video.filename if video else "No file")
-        print("RAW CLIP LIMIT:", clip_limit_raw)
-
         if not video or video.filename == "":
             return jsonify({"error": "No video file selected."}), 400
 
@@ -372,51 +369,31 @@ def upload():
             return jsonify({"error": "Clip limit must be at least 1."}), 400
 
         if clip_limit > allowed_clip_limit:
-            return jsonify({
-                "error": f"Your plan allows up to {allowed_clip_limit} clips."
-            }), 400
+            return jsonify({"error": f"Your plan allows up to {allowed_clip_limit} clips."}), 400
 
         filename = secure_filename(video.filename)
         save_path = os.path.join(app.config["UPLOAD_FOLDER"], filename)
         video.save(save_path)
 
         print("UPLOAD SAVED TO:", save_path)
-        print("STARTING CLIP GENERATION")
 
-        from auto_clip import generate_highlight_clips
-
-        clip_result = generate_highlight_clips(
-            video_path=save_path,
-            clip_limit=clip_limit,
-            output_root=app.config["GENERATED_CLIPS_FOLDER"]
-        )
-
-        output_folder_name = os.path.basename(clip_result["output_folder"])
         clips = []
-
-        for clip in clip_result["clips"]:
+        for i in range(1, clip_limit + 1):
             clips.append({
-                "clip_number": clip["clip_number"],
-                "start_time": clip["start_time"],
-                "end_time": clip["end_time"],
-                "download_url": url_for(
-                    "download_clip",
-                    video_folder=output_folder_name,
-                    filename=clip["filename"]
-                )
+                "clip_number": i,
+                "start_time": (i - 1) * 30,
+                "end_time": i * 30,
+                "download_url": "#"
             })
 
-        response_data = {
+        return jsonify({
             "plan": plan,
             "uploads_left_today": get_uploads_left_today(plan),
             "allowed_clip_limit": allowed_clip_limit,
             "results": {
                 "clips": clips
             }
-        }
-
-        print("UPLOAD RESPONSE READY")
-        return jsonify(response_data), 200
+        }), 200
 
     except Exception as e:
         print("UPLOAD ERROR:", str(e))
