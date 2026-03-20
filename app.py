@@ -1,10 +1,11 @@
-from flask import Flask, request, render_template, redirect, url_for, flash, session
+from flask import Flask, request, render_template, redirect, url_for, flash, session, jsonify
 import sqlite3
 import smtplib
 import os
 import traceback
 from email.message import EmailMessage
 from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.utils import secure_filename
 from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 
 app = Flask(__name__)
@@ -17,16 +18,24 @@ app.secret_key = os.environ.get("FLASK_SECRET_KEY", "change-this-secret-key")
 
 SMTP_HOST = os.environ.get("SMTP_HOST", "smtp.gmail.com")
 SMTP_PORT = int(os.environ.get("SMTP_PORT", "587"))
-
-# Use ONE clear name everywhere
 SMTP_USERNAME = os.environ.get("SMTP_USERNAME")
 SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD")
-
-# Sender email defaults to SMTP username
 EMAIL_FROM = os.environ.get("EMAIL_FROM", SMTP_USERNAME)
 
 BASE_URL = os.environ.get("BASE_URL", "http://127.0.0.1:5000")
 DATABASE_PATH = os.environ.get("DATABASE_PATH", "users.db")
+
+UPLOAD_FOLDER = os.environ.get("UPLOAD_FOLDER", "uploads")
+MAX_CONTENT_LENGTH = 1024 * 1024 * 1024  # 1 GB max upload size
+
+app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
+app.config["MAX_CONTENT_LENGTH"] = MAX_CONTENT_LENGTH
+
+os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
+
+ALLOWED_EXTENSIONS = {
+    "mp4", "mov", "avi", "mkv", "webm", "m4v"
+}
 
 
 # ======================
@@ -55,6 +64,32 @@ def init_db():
 
 
 # ======================
+# HELPERS
+# ======================
+def allowed_file(filename):
+    if "." not in filename:
+        return False
+    ext = filename.rsplit(".", 1)[1].lower()
+    return ext in ALLOWED_EXTENSIONS
+
+
+def get_user_plan():
+    # For now, default all users to free.
+    # Later you can replace this with real billing/subscription logic.
+    return "free"
+
+
+def get_allowed_clip_limit(plan):
+    return 20 if plan == "premium" else 3
+
+
+def get_uploads_left_today(plan):
+    # Placeholder for now.
+    # Replace later with real usage tracking if needed.
+    return 999 if plan == "premium" else 3
+
+
+# ======================
 # EMAIL FUNCTIONS
 # ======================
 def send_email(to_email, subject, body):
@@ -78,7 +113,7 @@ def send_email(to_email, subject, body):
 
     try:
         with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=30) as server:
-            server.set_debuglevel(1)  # shows SMTP conversation in Render logs
+            server.set_debuglevel(1)
             server.ehlo()
             server.starttls()
             server.ehlo()
@@ -114,7 +149,8 @@ def confirm_token(token):
 @app.route("/")
 def home():
     if "user" in session:
-        return render_template("index.html", username=session["user"])
+        plan = get_user_plan()
+        return render_template("index.html", username=session["user"], plan=plan)
     return redirect(url_for("login"))
 
 
@@ -151,11 +187,12 @@ def register():
 
         token = generate_token(email)
         verify_link = f"{BASE_URL}/verify/{token}"
+        print("VERIFY LINK:", verify_link)
 
         try:
             send_email(
                 email,
-                "Verify your email",
+                "Verify your LI3 Media account",
                 f"""Hi {username},
 
 Thanks for signing up.
@@ -237,11 +274,12 @@ def resend_verification():
 
         token = generate_token(user["email"])
         verify_link = f"{BASE_URL}/verify/{token}"
+        print("VERIFY LINK:", verify_link)
 
         try:
             send_email(
                 user["email"],
-                "Verify your email",
+                "Verify your LI3 Media account",
                 f"""Hi {user["username"]},
 
 Click the link below to verify your email:
@@ -294,13 +332,88 @@ def login():
     return render_template("login.html")
 
 
+@app.route("/upload", methods=["POST"])
+def upload():
+    try:
+        print("UPLOAD ROUTE HIT")
+
+        if "user" not in session:
+            return jsonify({"error": "Please log in first."}), 401
+
+        video = request.files.get("video")
+        clip_limit_raw = request.form.get("clip_limit", "3")
+
+        print("VIDEO RECEIVED:", video.filename if video else "No file")
+        print("RAW CLIP LIMIT:", clip_limit_raw)
+
+        if not video or video.filename == "":
+            return jsonify({"error": "No video file selected."}), 400
+
+        if not allowed_file(video.filename):
+            return jsonify({"error": "Unsupported file type."}), 400
+
+        try:
+            clip_limit = int(clip_limit_raw)
+        except ValueError:
+            return jsonify({"error": "Clip limit must be a number."}), 400
+
+        plan = get_user_plan()
+        allowed_clip_limit = get_allowed_clip_limit(plan)
+
+        if clip_limit < 1:
+            return jsonify({"error": "Clip limit must be at least 1."}), 400
+
+        if clip_limit > allowed_clip_limit:
+            return jsonify({
+                "error": f"Your plan allows up to {allowed_clip_limit} clips."
+            }), 400
+
+        filename = secure_filename(video.filename)
+        save_path = os.path.join(app.config["UPLOAD_FOLDER"], filename)
+        video.save(save_path)
+
+        print("UPLOAD SAVED TO:", save_path)
+
+        # ======================
+        # TEMPORARY TEST RESPONSE
+        # Replace this with your real clip generation logic later
+        # ======================
+        fake_clips = []
+        for i in range(1, clip_limit + 1):
+            fake_clips.append({
+                "clip_number": i,
+                "start_time": (i - 1) * 30,
+                "end_time": i * 30,
+                "download_url": url_for("static", filename="images/logo.png")
+            })
+
+        response_data = {
+            "plan": plan,
+            "uploads_left_today": get_uploads_left_today(plan),
+            "allowed_clip_limit": allowed_clip_limit,
+            "results": {
+                "clips": fake_clips
+            }
+        }
+
+        print("UPLOAD RESPONSE READY")
+        return jsonify(response_data), 200
+
+    except Exception as e:
+        print("UPLOAD ERROR:", str(e))
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/logout")
 def logout():
     session.clear()
     return redirect(url_for("login"))
 
 
-# Run DB setup on startup
+# ======================
+# STARTUP
+# ======================
 try:
     init_db()
     print("INIT_DB SUCCESS")
