@@ -8,6 +8,9 @@ import cv2
 def detect_motion(video_path):
     cap = cv2.VideoCapture(video_path)
 
+    if not cap.isOpened():
+        raise ValueError(f"Could not open video for motion detection: {video_path}")
+
     motion_scores = []
     prev_frame = None
 
@@ -16,7 +19,7 @@ def detect_motion(video_path):
         fps = 1
 
     frame_count = 0
-    sample_every = max(1, int(fps))
+    sample_every = max(1, int(fps * 2))  # sample every 2 seconds
 
     while True:
         ret, frame = cap.read()
@@ -27,6 +30,7 @@ def detect_motion(video_path):
             frame_count += 1
             continue
 
+        frame = cv2.resize(frame, (320, 180))
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
         if prev_frame is None:
@@ -59,14 +63,14 @@ def _analyze_audio(video):
 
         chunk = audio.subclipped(i, chunk_end)
 
-        try:
-            sound = chunk.to_soundarray(fps=22050)
-            if sound.size == 0:
-                volume = 0.0
-            else:
-                volume = float(np.mean(np.abs(sound)))
-        finally:
-            chunk.close()
+        # DO NOT close chunk here.
+        # It can close shared reader resources used by the parent audio clip.
+        sound = chunk.to_soundarray(fps=22050)
+
+        if sound.size == 0:
+            volume = 0.0
+        else:
+            volume = float(np.mean(np.abs(sound)))
 
         volumes.append(volume)
 
@@ -203,6 +207,8 @@ def generate_highlight_clips(video_path, clip_limit=3, output_root="generated_cl
                     output_path,
                     codec="libx264",
                     audio_codec="aac",
+                    preset="ultrafast",
+                    threads=2,
                     logger=None
                 )
             finally:
