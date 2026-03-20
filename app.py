@@ -71,7 +71,7 @@ def send_email(to_email, subject, body):
 
     msg = EmailMessage()
     msg["Subject"] = subject
-    msg["From"] = EMAIL_FROM
+    msg["From"] = f"LI3 Media <{EMAIL_FROM}>"
     msg["To"] = to_email
     msg.set_content(body)
 
