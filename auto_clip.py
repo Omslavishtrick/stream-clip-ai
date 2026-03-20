@@ -16,77 +16,72 @@ def detect_motion(video_path):
         fps = 1
 
     frame_count = 0
+    sample_every = max(1, int(fps))
 
     while True:
         ret, frame = cap.read()
         if not ret:
             break
 
-        if frame_count % int(fps) != 0:
+        if frame_count % sample_every != 0:
             frame_count += 1
             continue
 
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
         if prev_frame is None:
-            prev_frame = gray
-            motion_scores.append(0)
+            motion_scores.append(0.0)
         else:
             diff = cv2.absdiff(prev_frame, gray)
-            motion = diff.mean()
-            motion_scores.append(float(motion))
-            prev_frame = gray
+            motion_scores.append(float(diff.mean()))
 
+        prev_frame = gray
         frame_count += 1
 
     cap.release()
     return motion_scores
 
 
-def generate_highlight_clips(video_path, clip_limit=3, output_root="generated_clips"):
-    if not os.path.exists(video_path):
-        raise FileNotFoundError(f"Video not found: {video_path}")
-
-    clip_limit = int(clip_limit)
-    if clip_limit < 1:
-        clip_limit = 1
-
-    print("Opening video...")
-    video = VideoFileClip(video_path)
+def _analyze_audio(video):
     audio = video.audio
-
     if audio is None:
         raise ValueError("This video has no audio track.")
 
-    print("Detecting motion...")
-    motion_scores = detect_motion(video_path)
-
-    print("Analyzing audio chunks...")
     volumes = []
-    seconds = int(video.duration)
+    total_seconds = max(1, int(video.duration))
 
-    for i in range(seconds):
+    for i in range(total_seconds):
         chunk_end = min(i + 1, video.duration)
-        chunk = audio.subclipped(i, chunk_end)
-        sound = chunk.to_soundarray(fps=22050)
 
-        if sound.size == 0:
-            volume = 0.0
-        else:
-            volume = float(np.mean(np.abs(sound)))
+        if chunk_end <= i:
+            volumes.append(0.0)
+            continue
+
+        chunk = audio.subclipped(i, chunk_end)
+
+        try:
+            sound = chunk.to_soundarray(fps=22050)
+            if sound.size == 0:
+                volume = 0.0
+            else:
+                volume = float(np.mean(np.abs(sound)))
+        finally:
+            chunk.close()
 
         volumes.append(volume)
 
+    return volumes
+
+
+def _find_top_highlights(volumes, motion_scores, clip_limit):
     average_volume = float(np.mean(volumes)) if volumes else 0.0
-
-    highlight_data = []
-    window_size = 3
-    spike_multiplier = 1.25
-
     motion_average = float(np.mean(motion_scores)) if motion_scores else 0.0
     motion_max = float(max(motion_scores)) if motion_scores and max(motion_scores) > 0 else 1.0
     audio_max = float(max(volumes)) if volumes and max(volumes) > 0 else 1.0
 
+    highlight_data = []
+    window_size = 3
+    spike_multiplier = 1.25
     max_index = min(len(volumes), len(motion_scores))
 
     for i in range(window_size, max_index - window_size):
@@ -114,93 +109,135 @@ def generate_highlight_clips(video_path, clip_limit=3, output_root="generated_cl
     for second, score, audio_score, motion_score in highlight_data:
         if not merged_highlights:
             merged_highlights.append((second, score, audio_score, motion_score))
-        else:
-            last_second, last_score, _, _ = merged_highlights[-1]
+            continue
 
-            if second - last_second <= 8:
-                if score > last_score:
-                    merged_highlights[-1] = (second, score, audio_score, motion_score)
-            else:
-                merged_highlights.append((second, score, audio_score, motion_score))
+        last_second, last_score, _, _ = merged_highlights[-1]
+
+        if second - last_second <= 8:
+            if score > last_score:
+                merged_highlights[-1] = (second, score, audio_score, motion_score)
+        else:
+            merged_highlights.append((second, score, audio_score, motion_score))
 
     merged_highlights = sorted(merged_highlights, key=lambda x: x[1], reverse=True)
     top_highlights = merged_highlights[:clip_limit]
     top_highlights = sorted(top_highlights, key=lambda x: x[0])
 
-    video_name = os.path.splitext(os.path.basename(video_path))[0]
-    output_folder = os.path.join(output_root, f"{video_name}_clips")
+    return top_highlights, average_volume
 
-    if os.path.exists(output_folder):
-        shutil.rmtree(output_folder)
 
-    os.makedirs(output_folder, exist_ok=True)
+def generate_highlight_clips(video_path, clip_limit=3, output_root="generated_clips"):
+    if not os.path.exists(video_path):
+        raise FileNotFoundError(f"Video not found: {video_path}")
 
-    clip_count = 1
-    seconds_before = 7
-    seconds_after = 12
+    clip_limit = int(clip_limit)
+    if clip_limit < 1:
+        clip_limit = 1
 
-    report_lines = [
-        "HIGHLIGHT REPORT",
-        "=" * 40,
-        f"Video file: {video_path}",
-        f"Video duration: {video.duration:.2f} seconds",
-        f"Average volume: {average_volume:.4f}",
-        f"Total top highlights: {len(top_highlights)}",
-        ""
-    ]
+    print("Opening video...")
+    video = VideoFileClip(video_path)
 
-    clips = []
+    try:
+        print("Detecting motion...")
+        motion_scores = detect_motion(video_path)
 
-    for second, score, audio_score, motion_score in top_highlights:
-        start_time = max(0, second - seconds_before)
-        end_time = min(video.duration, second + seconds_after)
+        print("Analyzing audio chunks...")
+        volumes = _analyze_audio(video)
 
-        highlight_clip = video.subclipped(start_time, end_time)
-        output_filename = f"clip_{clip_count}.mp4"
-        output_path = os.path.join(output_folder, output_filename)
+        print("Finding top highlights...")
+        top_highlights, average_volume = _find_top_highlights(volumes, motion_scores, clip_limit)
 
-        print(
-            f"Saving clip {clip_count}: {start_time} to {end_time} | "
-            f"total={score:.4f} | audio={audio_score:.4f} | motion={motion_score:.4f}"
-        )
+        video_name = os.path.splitext(os.path.basename(video_path))[0]
+        output_folder = os.path.join(output_root, f"{video_name}_clips")
 
-        highlight_clip.write_videofile(
-            output_path,
-            codec="libx264",
-            audio_codec="aac"
-        )
+        if os.path.exists(output_folder):
+            shutil.rmtree(output_folder)
 
-        clips.append({
-            "clip_number": clip_count,
-            "start_time": round(start_time, 2),
-            "end_time": round(end_time, 2),
-            "filename": output_filename,
-            "file_path": output_path
-        })
+        os.makedirs(output_folder, exist_ok=True)
 
-        report_lines.append(f"Clip {clip_count}")
-        report_lines.append(f"  Highlight second: {second}")
-        report_lines.append(f"  Total score: {score:.4f}")
-        report_lines.append(f"  Audio score: {audio_score:.4f}")
-        report_lines.append(f"  Motion score: {motion_score:.4f}")
-        report_lines.append(f"  Clip start: {start_time}")
-        report_lines.append(f"  Clip end: {end_time}")
-        report_lines.append(f"  File: {output_filename}")
-        report_lines.append("")
+        seconds_before = 7
+        seconds_after = 12
 
-        clip_count += 1
+        report_lines = [
+            "HIGHLIGHT REPORT",
+            "=" * 40,
+            f"Video file: {video_path}",
+            f"Video duration: {video.duration:.2f} seconds",
+            f"Average volume: {average_volume:.4f}",
+            f"Total top highlights: {len(top_highlights)}",
+            ""
+        ]
 
-    report_path = os.path.join(output_folder, "highlight_report.txt")
-    with open(report_path, "w", encoding="utf-8") as f:
-        f.write("\n".join(report_lines))
+        clips = []
 
-    video.close()
+        if not top_highlights:
+            report_lines.append("No highlights were detected.")
+            report_path = os.path.join(output_folder, "highlight_report.txt")
+            with open(report_path, "w", encoding="utf-8") as f:
+                f.write("\n".join(report_lines))
 
-    return {
-        "output_folder": output_folder,
-        "report_path": report_path,
-        "clips": clips
-    }
+            return {
+                "output_folder": output_folder,
+                "report_path": report_path,
+                "clips": []
+            }
+
+        for clip_count, (second, score, audio_score, motion_score) in enumerate(top_highlights, start=1):
+            start_time = max(0, second - seconds_before)
+            end_time = min(video.duration, second + seconds_after)
+
+            if end_time <= start_time:
+                continue
+
+            output_filename = f"clip_{clip_count}.mp4"
+            output_path = os.path.join(output_folder, output_filename)
+
+            print(
+                f"Saving clip {clip_count}: {start_time} to {end_time} | "
+                f"total={score:.4f} | audio={audio_score:.4f} | motion={motion_score:.4f}"
+            )
+
+            highlight_clip = video.subclipped(start_time, end_time)
+            try:
+                highlight_clip.write_videofile(
+                    output_path,
+                    codec="libx264",
+                    audio_codec="aac",
+                    logger=None
+                )
+            finally:
+                highlight_clip.close()
+
+            clips.append({
+                "clip_number": clip_count,
+                "start_time": round(start_time, 2),
+                "end_time": round(end_time, 2),
+                "filename": output_filename,
+                "file_path": output_path
+            })
+
+            report_lines.append(f"Clip {clip_count}")
+            report_lines.append(f"  Highlight second: {second}")
+            report_lines.append(f"  Total score: {score:.4f}")
+            report_lines.append(f"  Audio score: {audio_score:.4f}")
+            report_lines.append(f"  Motion score: {motion_score:.4f}")
+            report_lines.append(f"  Clip start: {start_time}")
+            report_lines.append(f"  Clip end: {end_time}")
+            report_lines.append(f"  File: {output_filename}")
+            report_lines.append("")
+
+        report_path = os.path.join(output_folder, "highlight_report.txt")
+        with open(report_path, "w", encoding="utf-8") as f:
+            f.write("\n".join(report_lines))
+
+        return {
+            "output_folder": output_folder,
+            "report_path": report_path,
+            "clips": clips
+        }
+
+    finally:
+        video.close()
 
 
 if __name__ == "__main__":
