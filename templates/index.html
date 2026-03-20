@@ -3,250 +3,641 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Stream Clip AI</title>
+    <title>LI3 Media | Stream Clip AI</title>
     <style>
+        :root {
+            --bg: #04132b;
+            --bg-soft: #071b3d;
+            --card: rgba(8, 23, 52, 0.92);
+            --card-2: rgba(10, 28, 62, 0.95);
+            --text: #f8fbff;
+            --muted: #9fb4d9;
+            --border: rgba(77, 146, 255, 0.22);
+            --primary: #2f8cff;
+            --primary-hover: #1f78ea;
+            --accent: #79beff;
+            --success: #56d68c;
+            --error: #ff6b6b;
+            --shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
+            --glow: 0 0 24px rgba(47, 140, 255, 0.28);
+            --radius: 20px;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
         body {
-            font-family: Arial, sans-serif;
-            max-width: 900px;
-            margin: 40px auto;
-            padding: 20px;
-            background: #f7f7f7;
+            margin: 0;
+            font-family: Inter, Arial, sans-serif;
+            color: var(--text);
+            background:
+                radial-gradient(circle at top, rgba(47, 140, 255, 0.14), transparent 30%),
+                linear-gradient(180deg, #020b1a 0%, #04132b 50%, #020816 100%);
+            min-height: 100vh;
         }
 
-        .card {
-            background: white;
-            padding: 20px;
+        .page {
+            max-width: 1180px;
+            margin: 0 auto;
+            padding: 28px 20px 56px;
+        }
+
+        .topbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 16px;
+            flex-wrap: wrap;
+            margin-bottom: 26px;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+
+        .brand-logo {
+            width: 60px;
+            height: 60px;
+            object-fit: contain;
+            border-radius: 14px;
+            box-shadow: var(--glow);
+            background: rgba(255,255,255,0.02);
+        }
+
+        .brand-text h1 {
+            margin: 0;
+            font-size: 22px;
+            letter-spacing: 0.4px;
+        }
+
+        .brand-text p {
+            margin: 4px 0 0;
+            color: var(--muted);
+            font-size: 14px;
+        }
+
+        .logout-link {
+            text-decoration: none;
+            color: var(--text);
+            background: rgba(255,255,255,0.04);
+            border: 1px solid var(--border);
+            padding: 10px 14px;
             border-radius: 12px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.08);
-            margin-bottom: 20px;
+            font-weight: 700;
+            transition: 0.2s ease;
         }
 
-        h1, h2 {
-            margin-top: 0;
+        .logout-link:hover {
+            background: rgba(47, 140, 255, 0.12);
+            border-color: rgba(121, 190, 255, 0.45);
         }
 
-        button {
-            background: #4f46e5;
-            color: white;
-            border: none;
-            padding: 12px 18px;
-            border-radius: 8px;
-            cursor: pointer;
+        .hero {
+            background: linear-gradient(135deg, rgba(7, 27, 61, 0.98), rgba(5, 19, 43, 0.96));
+            border: 1px solid var(--border);
+            border-radius: 26px;
+            box-shadow: var(--shadow);
+            padding: 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 24px;
+            flex-wrap: wrap;
+            margin-bottom: 24px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .hero::after {
+            content: "";
+            position: absolute;
+            right: -80px;
+            top: -80px;
+            width: 240px;
+            height: 240px;
+            background: radial-gradient(circle, rgba(47, 140, 255, 0.16), transparent 65%);
+            pointer-events: none;
+        }
+
+        .hero h2 {
+            font-size: 36px;
+            margin: 0 0 10px;
+            line-height: 1.1;
+        }
+
+        .hero p {
+            margin: 0;
+            color: var(--muted);
+            max-width: 680px;
+            line-height: 1.6;
             font-size: 16px;
         }
 
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 8px 14px;
+            border-radius: 999px;
+            font-weight: 800;
+            font-size: 13px;
+            margin-left: 12px;
+            vertical-align: middle;
+        }
+
+        .premium-badge {
+            background: rgba(121, 190, 255, 0.14);
+            color: #d8ecff;
+            border: 1px solid rgba(121, 190, 255, 0.35);
+            box-shadow: var(--glow);
+        }
+
+        .free-badge {
+            background: rgba(255,255,255,0.05);
+            color: #d8ecff;
+            border: 1px solid rgba(121, 190, 255, 0.2);
+        }
+
+        .hero-actions {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 10px;
+        }
+
+        button {
+            background: linear-gradient(135deg, var(--primary), #175fca);
+            color: white;
+            border: none;
+            padding: 13px 18px;
+            border-radius: 12px;
+            cursor: pointer;
+            font-size: 15px;
+            font-weight: 800;
+            transition: 0.2s ease;
+            box-shadow: 0 10px 22px rgba(47, 140, 255, 0.24);
+        }
+
         button:hover {
-            background: #4338ca;
+            background: linear-gradient(135deg, var(--primary-hover), #1557bb);
+            transform: translateY(-1px);
         }
 
         button:disabled {
-            background: gray;
+            background: #5c6f92;
             cursor: not-allowed;
+            box-shadow: none;
+            transform: none;
+        }
+
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: 1.15fr 0.85fr;
+            gap: 24px;
+        }
+
+        .card {
+            background: linear-gradient(180deg, var(--card), var(--card-2));
+            border: 1px solid var(--border);
+            padding: 24px;
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            margin-bottom: 24px;
+        }
+
+        .card h2,
+        .card h3 {
+            margin: 0 0 8px;
+            font-size: 26px;
+        }
+
+        .card-subtitle {
+            color: var(--muted);
+            margin: 0 0 22px;
+            line-height: 1.5;
+        }
+
+        .upload-zone {
+            border: 2px dashed rgba(121, 190, 255, 0.35);
+            background: rgba(255,255,255,0.03);
+            border-radius: 18px;
+            padding: 22px;
+            margin-bottom: 18px;
+        }
+
+        .upload-zone label,
+        .field label {
+            display: block;
+            font-weight: 700;
+            margin-bottom: 10px;
         }
 
         input[type="file"],
         input[type="number"] {
-            margin-top: 10px;
-            margin-bottom: 15px;
-            display: block;
+            background: rgba(255,255,255,0.06);
+            border: 1px solid rgba(121, 190, 255, 0.2);
+            color: var(--text);
+            border-radius: 12px;
+            padding: 12px;
         }
 
-        .premium-badge {
-            display: inline-block;
-            background: gold;
-            color: black;
-            padding: 6px 10px;
-            border-radius: 999px;
-            font-weight: bold;
-            margin-left: 10px;
+        input[type="file"] {
+            width: 100%;
         }
 
-        .free-badge {
-            display: inline-block;
-            background: #ddd;
-            color: black;
-            padding: 6px 10px;
-            border-radius: 999px;
-            font-weight: bold;
-            margin-left: 10px;
+        input[type="number"] {
+            width: 140px;
+        }
+
+        .field {
+            margin-bottom: 18px;
         }
 
         .message {
-            margin-top: 15px;
-            font-weight: bold;
+            margin-top: 16px;
+            font-weight: 700;
+            line-height: 1.5;
         }
 
         .error {
-            color: red;
+            color: var(--error);
         }
 
         .success {
-            color: green;
+            color: var(--success);
         }
 
-        ul {
-            padding-left: 20px;
+        .muted {
+            color: var(--muted);
         }
 
-        a {
-            color: #2563eb;
+        .results-empty {
+            border: 1px dashed rgba(121, 190, 255, 0.25);
+            border-radius: 18px;
+            padding: 28px;
+            text-align: center;
+            background: rgba(255,255,255,0.03);
         }
+
+        .results-empty h4 {
+            margin: 0 0 10px;
+            font-size: 18px;
+        }
+
+        .results-empty p {
+            margin: 0;
+            color: var(--muted);
+            line-height: 1.6;
+        }
+
+        .stat-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 14px;
+            margin-bottom: 18px;
+        }
+
+        .stat-box {
+            background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(121, 190, 255, 0.18);
+            border-radius: 16px;
+            padding: 16px;
+        }
+
+        .stat-label {
+            font-size: 13px;
+            color: var(--muted);
+            margin-bottom: 6px;
+        }
+
+        .stat-value {
+            font-size: 24px;
+            font-weight: 800;
+            color: #ffffff;
+        }
+
+        .tips-list {
+            margin: 0;
+            padding-left: 18px;
+            color: var(--muted);
+            line-height: 1.7;
+        }
+
+        .results-header {
+            margin-bottom: 18px;
+        }
+
+        .results-header p {
+            margin: 6px 0 0;
+            color: var(--muted);
+        }
+
+        .clips-grid {
+            display: grid;
+            gap: 16px;
+        }
+
+        .clip-card {
+            padding: 18px;
+            border-radius: 16px;
+            background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(121, 190, 255, 0.18);
+        }
+
+        .clip-card-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-bottom: 10px;
+        }
+
+        .clip-title {
+            font-size: 18px;
+            font-weight: 800;
+        }
+
+        .clip-time {
+            color: var(--muted);
+            font-size: 14px;
+        }
+
+        .clip-actions {
+            margin-top: 14px;
+        }
+
+        .clip-actions a {
+            text-decoration: none;
+        }
+
+        .mini-note {
+            font-size: 13px;
+            color: var(--muted);
+            margin-top: 10px;
+        }
+
         .spinner {
-    width: 20px;
-    height: 20px;
-    border: 3px solid #ddd;
-    border-top: 3px solid #4f46e5;
-    border-radius: 50%;
-    animation: spin 1s linear infinite;
-}
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,0.18);
+            border-top: 3px solid var(--primary);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
 
-@keyframes spin {
-    to { transform: rotate(360deg); }
-}
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        @media (max-width: 900px) {
+            .dashboard-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .hero h2 {
+                font-size: 28px;
+            }
+
+            .page {
+                padding: 20px 16px 40px;
+            }
+
+            .hero,
+            .card {
+                padding: 20px;
+            }
+        }
     </style>
 </head>
 <body>
-    <div class="card">
-        <h1>
-            Welcome, {{ username }}
-            {% if plan == "premium" %}
-                <span class="premium-badge">Premium</span>
-            {% else %}
-                <span class="free-badge">Free</span>
-            {% endif %}
-        </h1>
+    <div class="page">
+        <div class="topbar">
+            <div class="brand">
+                <img src="{{ url_for('static', filename='images/logo.png') }}" alt="LI3 Media logo" class="brand-logo">
+                <div class="brand-text">
+                    <h1>LI3 Media</h1>
+                    <p>Stream Clip AI Dashboard</p>
+                </div>
+            </div>
 
-        <p>Create highlight clips from your streams.</p>
+            <a class="logout-link" href="/logout">Log out</a>
+        </div>
 
-        {% if plan != "premium" %}
-            <button id="upgradeBtn">Upgrade to Premium</button>
-            <p id="upgradeMessage" class="message"></p>
-        {% else %}
-            <p class="success">Your account has Premium access.</p>
-        {% endif %}
+        <section class="hero">
+            <div>
+                <h2>
+                    Welcome back, {{ username }}
+                    {% if plan == "premium" %}
+                        <span class="badge premium-badge">Premium</span>
+                    {% else %}
+                        <span class="badge free-badge">Free Plan</span>
+                    {% endif %}
+                </h2>
+                <p>
+                    Upload your stream, generate highlight clips, and turn long-form content into short, shareable moments with the LI3 Media workflow.
+                </p>
+            </div>
 
-        <p>
-            <a href="/logout">Logout</a>
-        </p>
-    </div>
+            <div class="hero-actions">
+                {% if plan != "premium" %}
+                    <button id="upgradeBtn">Upgrade to Premium</button>
+                    <p id="upgradeMessage" class="message muted"></p>
+                {% else %}
+                    <p class="success">Your account has Premium access.</p>
+                {% endif %}
+            </div>
+        </section>
 
-    <div class="card">
-        <h2>Upload Video</h2>
+        <div class="dashboard-grid">
+            <div>
+                <section class="card">
+                    <h2>Upload Your Video</h2>
+                    <p class="card-subtitle">
+                        Add a stream or video file and choose how many clips you want generated.
+                    </p>
 
-        <form id="uploadForm">
-            <label for="video">Choose video:</label>
-            <input type="file" id="video" name="video" accept="video/*" required>
+                    <form id="uploadForm">
+                        <div class="upload-zone">
+                            <label for="video">Choose video file</label>
+                            <input type="file" id="video" name="video" accept="video/*" required>
+                            <div class="mini-note">Best results come from clear audio and strong highlight moments.</div>
+                        </div>
 
-            <label for="clip_limit">How many clips do you want?</label>
-            <input type="number" id="clip_limit" name="clip_limit" min="1" max="20" value="3">
+                        <div class="field">
+                            <label for="clip_limit">Number of clips to generate</label>
+                            <input type="number" id="clip_limit" name="clip_limit" min="1" max="20" value="3">
+                        </div>
 
-            <button type="submit">Upload and Process</button>
-        </form>
+                        <button type="submit">Upload and Process</button>
+                    </form>
 
-        <p id="uploadMessage" class="message"></p>
-    </div>
+                    <p id="uploadMessage" class="message"></p>
+                </section>
 
-    <div class="card">
-        <h2>Results</h2>
-        <div id="results"></div>
+                <section class="card">
+                    <div class="results-header">
+                        <h2>Generated Highlights</h2>
+                        <p>Your finished clips will appear here.</p>
+                    </div>
+                    <div id="results">
+                        <div class="results-empty">
+                            <h4>No clips yet</h4>
+                            <p>Upload a video to start creating highlights.</p>
+                        </div>
+                    </div>
+                </section>
+            </div>
+
+            <div>
+                <section class="card">
+                    <h3>Workspace Overview</h3>
+                    <p class="card-subtitle">Quick view of your current account and usage.</p>
+
+                    <div class="stat-grid">
+                        <div class="stat-box">
+                            <div class="stat-label">Current plan</div>
+                            <div class="stat-value">{{ plan|capitalize }}</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-label">Default clips</div>
+                            <div class="stat-value">3</div>
+                        </div>
+                    </div>
+
+                    <p class="muted">Premium users can process more content with fewer limits.</p>
+                </section>
+
+                <section class="card">
+                    <h3>Tips for Better Clips</h3>
+                    <p class="card-subtitle">A few things that usually improve results.</p>
+                    <ul class="tips-list">
+                        <li>Use clear audio so highlight moments are easier to detect.</li>
+                        <li>Upload higher quality footage for cleaner output.</li>
+                        <li>Start with 3 to 5 clips, then increase as needed.</li>
+                        <li>Use exciting moments, reactions, and commentary-heavy content.</li>
+                    </ul>
+                </section>
+            </div>
+        </div>
     </div>
 
     <script>
-    const upgradeBtn = document.getElementById("upgradeBtn");
-    const upgradeMessage = document.getElementById("upgradeMessage");
-    const uploadForm = document.getElementById("uploadForm");
-    const uploadMessage = document.getElementById("uploadMessage");
-    const resultsDiv = document.getElementById("results");
+        const upgradeBtn = document.getElementById("upgradeBtn");
+        const upgradeMessage = document.getElementById("upgradeMessage");
+        const uploadForm = document.getElementById("uploadForm");
+        const uploadMessage = document.getElementById("uploadMessage");
+        const resultsDiv = document.getElementById("results");
 
-    if (upgradeBtn) {
-        upgradeBtn.addEventListener("click", async function () {
-            upgradeBtn.disabled = true;
-            upgradeMessage.textContent = "Opening secure checkout...";
-            upgradeMessage.className = "message";
+        if (upgradeBtn) {
+            upgradeBtn.addEventListener("click", async function () {
+                upgradeBtn.disabled = true;
+                upgradeMessage.textContent = "Opening secure checkout...";
+                upgradeMessage.className = "message muted";
 
-            const response = await fetch("/upgrade", { method: "POST" });
-            const data = await response.json();
+                const response = await fetch("/upgrade", { method: "POST" });
+                const data = await response.json();
 
-            if (data.checkout_url) {
-                window.location.href = data.checkout_url;
-            } else {
-                upgradeMessage.textContent = "Upgrade failed.";
-                upgradeMessage.className = "message error";
-                upgradeBtn.disabled = false;
+                if (data.checkout_url) {
+                    window.location.href = data.checkout_url;
+                } else {
+                    upgradeMessage.textContent = "Upgrade failed.";
+                    upgradeMessage.className = "message error";
+                    upgradeBtn.disabled = false;
+                }
+            });
+        }
+
+        uploadForm.addEventListener("submit", async function (event) {
+            event.preventDefault();
+
+            uploadMessage.innerHTML = `
+                <div style="display:flex;align-items:center;gap:10px;">
+                    <div class="spinner"></div>
+                    Processing your video... this may take a minute.
+                </div>
+            `;
+            uploadMessage.className = "message";
+
+            resultsDiv.innerHTML = `
+                <div class="results-empty">
+                    <h4>Processing started</h4>
+                    <p>Your clips are being generated now.</p>
+                </div>
+            `;
+
+            const formData = new FormData(uploadForm);
+
+            try {
+                const response = await fetch("/upload", {
+                    method: "POST",
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    uploadMessage.textContent = data.error || "Upload failed.";
+                    uploadMessage.className = "message error";
+                    return;
+                }
+
+                uploadMessage.textContent = "Done. Your clips are ready.";
+                uploadMessage.className = "message success";
+
+                let html = `
+                    <div class="stat-grid" style="margin-bottom:20px;">
+                        <div class="stat-box">
+                            <div class="stat-label">Plan</div>
+                            <div class="stat-value" style="font-size:20px;">${data.plan}</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-label">Uploads left today</div>
+                            <div class="stat-value" style="font-size:20px;">${data.uploads_left_today}</div>
+                        </div>
+                    </div>
+                    <p class="muted"><strong>Allowed clip limit:</strong> ${data.allowed_clip_limit}</p>
+                `;
+
+                if (data.results && data.results.clips && data.results.clips.length > 0) {
+                    html += `<div class="clips-grid">`;
+
+                    for (const clip of data.results.clips) {
+                        html += `
+                            <div class="clip-card">
+                                <div class="clip-card-top">
+                                    <div class="clip-title">Clip ${clip.clip_number}</div>
+                                    <div class="clip-time">${clip.start_time}s → ${clip.end_time}s</div>
+                                </div>
+                                <p class="muted">Your clip is ready to download.</p>
+                                <div class="clip-actions">
+                                    <a href="${clip.download_url}">
+                                        <button type="button">Download Clip</button>
+                                    </a>
+                                </div>
+                            </div>
+                        `;
+                    }
+
+                    html += `</div>`;
+                } else {
+                    html += `
+                        <div class="results-empty">
+                            <h4>No clips found</h4>
+                            <p>Try another video or adjust your input settings.</p>
+                        </div>
+                    `;
+                }
+
+                resultsDiv.innerHTML = html;
+
+            } catch (err) {
+                uploadMessage.textContent = "Something went wrong.";
+                uploadMessage.className = "message error";
             }
         });
-    }
-
-    uploadForm.addEventListener("submit", async function (event) {
-        event.preventDefault();
-
-        uploadMessage.innerHTML = `
-            <div style="display:flex;align-items:center;gap:10px;">
-                <div class="spinner"></div>
-                Processing your video... this may take a minute
-            </div>
-        `;
-        uploadMessage.className = "message";
-
-        resultsDiv.innerHTML = "";
-
-        const formData = new FormData(uploadForm);
-
-        try {
-            const response = await fetch("/upload", {
-                method: "POST",
-                body: formData
-            });
-
-            const data = await response.json();
-
-            if (!response.ok) {
-                uploadMessage.textContent = data.error || "Upload failed.";
-                uploadMessage.className = "message error";
-                return;
-            }
-
-            uploadMessage.textContent = "✅ Done! Your clips are ready.";
-            uploadMessage.className = "message success";
-
-            let html = `
-    <p><strong>Plan:</strong> ${data.plan}</p>
-    <p><strong>Uploads left:</strong> ${data.uploads_left_today}</p>
-    <p><strong>Allowed clip limit:</strong> ${data.allowed_clip_limit}</p>
-`;
-
-if (data.results && data.results.clips && data.results.clips.length > 0) {
-    html += `<h3>Your Clips</h3><div style="display:grid;gap:15px;">`;
-
-    for (const clip of data.results.clips) {
-        html += `
-            <div style="
-                padding:15px;
-                border-radius:10px;
-                background:#f9fafb;
-                border:1px solid #eee;
-            ">
-                <strong>Clip ${clip.clip_number}</strong><br>
-                ⏱ ${clip.start_time}s → ${clip.end_time}s<br><br>
-                <a href="${clip.download_url}">
-                    <button type="button">Download Clip</button>
-                </a>
-            </div>
-        `;
-    }
-
-    html += "</div>";
-} else {
-    html += "<p>No clips were found.</p>";
-}
-
-            resultsDiv.innerHTML = html;
-
-        } catch (err) {
-            uploadMessage.textContent = "Something went wrong.";
-            uploadMessage.className = "message error";
-        }
-    });
     </script>
 </body>
 </html>
