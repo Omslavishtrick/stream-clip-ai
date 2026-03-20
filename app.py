@@ -2,6 +2,7 @@ from flask import Flask, request, render_template, redirect, url_for, flash, ses
 import sqlite3
 import smtplib
 import os
+import traceback
 from email.message import EmailMessage
 from werkzeug.security import generate_password_hash, check_password_hash
 from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
@@ -15,12 +16,17 @@ app.secret_key = os.environ.get("FLASK_SECRET_KEY", "change-this-secret-key")
 
 SMTP_HOST = os.environ.get("SMTP_HOST", "smtp.gmail.com")
 SMTP_PORT = int(os.environ.get("SMTP_PORT", "587"))
-SMTP_EMAIL = os.environ.get("SMTP_USERNAME")
+
+# Use ONE clear name everywhere
+SMTP_USERNAME = os.environ.get("SMTP_USERNAME")
 SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD")
-EMAIL_FROM = os.environ.get("EMAIL_FROM", SMTP_EMAIL)
+
+# Sender email defaults to SMTP username
+EMAIL_FROM = os.environ.get("EMAIL_FROM", SMTP_USERNAME)
 
 BASE_URL = os.environ.get("BASE_URL", "http://127.0.0.1:5000")
 DATABASE_PATH = os.environ.get("DATABASE_PATH", "users.db")
+
 
 # ======================
 # DATABASE
@@ -33,7 +39,6 @@ def get_db():
 
 def init_db():
     conn = get_db()
-
     conn.execute("""
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -44,7 +49,6 @@ def init_db():
             created_at TEXT DEFAULT CURRENT_TIMESTAMP
         )
     """)
-
     conn.commit()
     conn.close()
 
@@ -53,10 +57,17 @@ def init_db():
 # EMAIL FUNCTIONS
 # ======================
 def send_email(to_email, subject, body):
-    if not SMTP_EMAIL or not SMTP_PASSWORD:
-        raise ValueError("SMTP email settings are missing. Set SMTP_USERNAME and SMTP_PASSWORD.")
+    if not SMTP_USERNAME or not SMTP_PASSWORD:
+        raise ValueError("SMTP settings missing. Set SMTP_USERNAME and SMTP_PASSWORD.")
+
+    if not EMAIL_FROM:
+        raise ValueError("EMAIL_FROM is missing.")
 
     print("ATTEMPTING TO SEND EMAIL TO:", to_email)
+    print("SMTP_HOST:", SMTP_HOST)
+    print("SMTP_PORT:", SMTP_PORT)
+    print("SMTP_USERNAME:", SMTP_USERNAME)
+    print("EMAIL_FROM:", EMAIL_FROM)
 
     msg = EmailMessage()
     msg["Subject"] = subject
@@ -64,12 +75,21 @@ def send_email(to_email, subject, body):
     msg["To"] = to_email
     msg.set_content(body)
 
-    with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
-        server.starttls()
-        server.login(SMTP_EMAIL, SMTP_PASSWORD)
-        server.send_message(msg)
+    try:
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=30) as server:
+            server.set_debuglevel(1)  # shows SMTP conversation in Render logs
+            server.ehlo()
+            server.starttls()
+            server.ehlo()
+            server.login(SMTP_USERNAME, SMTP_PASSWORD)
+            server.send_message(msg)
 
-    print("EMAIL SENT SUCCESSFULLY")
+        print("EMAIL SENT SUCCESSFULLY")
+
+    except Exception as e:
+        print("SEND_EMAIL ERROR:", str(e))
+        traceback.print_exc()
+        raise
 
 
 # ======================
@@ -148,7 +168,8 @@ This link expires in 24 hours.
             )
             flash("Account created. Check your email to verify your account.")
         except Exception as e:
-            print("EMAIL SEND ERROR:", repr(e))
+            print("REGISTER EMAIL SEND ERROR:", str(e))
+            traceback.print_exc()
             flash("Account created, but the verification email could not be sent.")
 
         return redirect(url_for("login"))
@@ -231,7 +252,8 @@ This link expires in 24 hours.
             )
             flash("Verification email sent.")
         except Exception as e:
-            print("RESEND EMAIL ERROR:", repr(e))
+            print("RESEND EMAIL ERROR:", str(e))
+            traceback.print_exc()
             flash("Could not send verification email right now.")
 
         return redirect(url_for("login"))
@@ -277,8 +299,9 @@ def logout():
     return redirect(url_for("login"))
 
 
-# Run DB setup on startup for Render/Gunicorn
+# Run DB setup on startup
 init_db()
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
