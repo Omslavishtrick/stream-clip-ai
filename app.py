@@ -37,16 +37,17 @@ BASE_URL = os.environ.get("BASE_URL", "http://127.0.0.1:5000")
 DATABASE_PATH = os.environ.get("DATABASE_PATH", "users.db")
 
 UPLOAD_FOLDER = os.environ.get("UPLOAD_FOLDER", "uploads")
+GENERATED_CLIPS_FOLDER = os.environ.get("GENERATED_CLIPS_FOLDER", "generated_clips")
 MAX_CONTENT_LENGTH = 1024 * 1024 * 1024  # 1 GB max upload size
 
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
+app.config["GENERATED_CLIPS_FOLDER"] = GENERATED_CLIPS_FOLDER
 app.config["MAX_CONTENT_LENGTH"] = MAX_CONTENT_LENGTH
 
 os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
+os.makedirs(app.config["GENERATED_CLIPS_FOLDER"], exist_ok=True)
 
-ALLOWED_EXTENSIONS = {
-    "mp4", "mov", "avi", "mkv", "webm", "m4v"
-}
+ALLOWED_EXTENSIONS = {"mp4", "mov", "avi", "mkv", "webm", "m4v"}
 
 
 # ======================
@@ -85,8 +86,6 @@ def allowed_file(filename):
 
 
 def get_user_plan():
-    # For now, default all users to free.
-    # Later you can replace this with real billing/subscription logic.
     return "free"
 
 
@@ -95,8 +94,6 @@ def get_allowed_clip_limit(plan):
 
 
 def get_uploads_left_today(plan):
-    # Placeholder for now.
-    # Replace later with real usage tracking if needed.
     return 999 if plan == "premium" else 3
 
 
@@ -111,10 +108,6 @@ def send_email(to_email, subject, body):
         raise ValueError("EMAIL_FROM is missing.")
 
     print("ATTEMPTING TO SEND EMAIL TO:", to_email)
-    print("SMTP_HOST:", SMTP_HOST)
-    print("SMTP_PORT:", SMTP_PORT)
-    print("SMTP_USERNAME:", SMTP_USERNAME)
-    print("EMAIL_FROM:", EMAIL_FROM)
 
     msg = EmailMessage()
     msg["Subject"] = subject
@@ -124,7 +117,6 @@ def send_email(to_email, subject, body):
 
     try:
         with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=30) as server:
-            server.set_debuglevel(1)
             server.ehlo()
             server.starttls()
             server.ehlo()
@@ -343,6 +335,12 @@ def login():
     return render_template("login.html")
 
 
+@app.route("/clips/<video_folder>/<filename>")
+def download_clip(video_folder, filename):
+    folder_path = os.path.join(app.config["GENERATED_CLIPS_FOLDER"], video_folder)
+    return send_from_directory(folder_path, filename, as_attachment=True)
+
+
 @app.route("/upload", methods=["POST"])
 def upload():
     try:
@@ -384,18 +382,27 @@ def upload():
         video.save(save_path)
 
         print("UPLOAD SAVED TO:", save_path)
+        print("STARTING CLIP GENERATION")
 
-        # ======================
-        # TEMPORARY TEST RESPONSE
-        # Replace this with your real clip generation logic later
-        # ======================
-        fake_clips = []
-        for i in range(1, clip_limit + 1):
-            fake_clips.append({
-                "clip_number": i,
-                "start_time": (i - 1) * 30,
-                "end_time": i * 30,
-                "download_url": url_for("static", filename="images/logo.png")
+        clip_result = generate_highlight_clips(
+            video_path=save_path,
+            clip_limit=clip_limit,
+            output_root=app.config["GENERATED_CLIPS_FOLDER"]
+        )
+
+        output_folder_name = os.path.basename(clip_result["output_folder"])
+        clips = []
+
+        for clip in clip_result["clips"]:
+            clips.append({
+                "clip_number": clip["clip_number"],
+                "start_time": clip["start_time"],
+                "end_time": clip["end_time"],
+                "download_url": url_for(
+                    "download_clip",
+                    video_folder=output_folder_name,
+                    filename=clip["filename"]
+                )
             })
 
         response_data = {
@@ -403,7 +410,7 @@ def upload():
             "uploads_left_today": get_uploads_left_today(plan),
             "allowed_clip_limit": allowed_clip_limit,
             "results": {
-                "clips": fake_clips
+                "clips": clips
             }
         }
 
