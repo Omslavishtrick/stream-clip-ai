@@ -1,4 +1,4 @@
-from moviepy.editor import VideoFileClip
+from moviepy import VideoFileClip
 import numpy as np
 import os
 import shutil
@@ -67,7 +67,7 @@ def generate_highlight_clips(video_path, clip_limit=3, output_root="generated_cl
 
     for i in range(seconds):
         chunk_end = min(i + 1, video.duration)
-        chunk = audio.subclip(i, chunk_end)
+        chunk = audio.subclipped(i, chunk_end)
         sound = chunk.to_soundarray(fps=22050)
 
         if sound.size == 0:
@@ -155,7 +155,7 @@ def generate_highlight_clips(video_path, clip_limit=3, output_root="generated_cl
         start_time = max(0, second - seconds_before)
         end_time = min(video.duration, second + seconds_after)
 
-        highlight_clip = video.subclip(start_time, end_time)
+        highlight_clip = video.subclipped(start_time, end_time)
         output_filename = f"clip_{clip_count}.mp4"
         output_path = os.path.join(output_folder, output_filename)
 
