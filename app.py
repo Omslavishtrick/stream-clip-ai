@@ -17,7 +17,6 @@ from email.message import EmailMessage
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
-from auto_clip import generate_highlight_clips
 
 app = Flask(__name__)
 print("APP FILE LOADED")
@@ -383,6 +382,8 @@ def upload():
 
         print("UPLOAD SAVED TO:", save_path)
         print("STARTING CLIP GENERATION")
+
+        from auto_clip import generate_highlight_clips
 
         clip_result = generate_highlight_clips(
             video_path=save_path,
