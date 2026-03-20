@@ -8,6 +8,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 
 app = Flask(__name__)
+print("APP FILE LOADED")
 
 # ======================
 # ENVIRONMENT VARIABLES
@@ -300,7 +301,12 @@ def logout():
 
 
 # Run DB setup on startup
-init_db()
+try:
+    init_db()
+    print("INIT_DB SUCCESS")
+except Exception as e:
+    print("INIT_DB ERROR:", str(e))
+    raise
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
