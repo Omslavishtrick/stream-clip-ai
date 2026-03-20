@@ -1,4 +1,14 @@
-from flask import Flask, request, render_template, redirect, url_for, flash, session, jsonify
+from flask import (
+    Flask,
+    request,
+    render_template,
+    redirect,
+    url_for,
+    flash,
+    session,
+    jsonify,
+    send_from_directory,
+)
 import sqlite3
 import smtplib
 import os
@@ -7,6 +17,7 @@ from email.message import EmailMessage
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
+from auto_clip import generate_highlight_clips
 
 app = Flask(__name__)
 print("APP FILE LOADED")
