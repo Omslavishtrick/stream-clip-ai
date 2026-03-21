@@ -9,16 +9,25 @@ from flask import (
     jsonify,
     send_from_directory,
 )
-import sqlite3
-import smtplib
+
+import math
 import os
+import smtplib
+import sqlite3
 import traceback
 import uuid
 from pathlib import Path
 from email.message import EmailMessage
+
+try:
+    from moviepy import VideoFileClip
+except ImportError:
+    from moviepy.editor import VideoFileClip
+
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
+
 
 BASE_DIR = Path(__file__).resolve().parent
 UPLOAD_FOLDER = BASE_DIR / "uploads"
@@ -27,9 +36,10 @@ DATABASE_PATH = BASE_DIR / "users.db"
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "change-this-secret-key")
+
 app.config["UPLOAD_FOLDER"] = str(UPLOAD_FOLDER)
 app.config["GENERATED_CLIPS_FOLDER"] = str(GENERATED_CLIPS_FOLDER)
-app.config["MAX_CONTENT_LENGTH"] = 1024 * 1024 * 1024  # 1 GB
+app.config["MAX_CONTENT_LENGTH"] = 1024 * 1024 * 1024  # 1 GB max upload
 
 SMTP_HOST = os.environ.get("SMTP_HOST", "smtp.gmail.com")
 SMTP_PORT = int(os.environ.get("SMTP_PORT", "587"))
@@ -39,43 +49,42 @@ EMAIL_FROM = os.environ.get("EMAIL_FROM", SMTP_USERNAME)
 
 BASE_URL = os.environ.get("BASE_URL", "").rstrip("/")
 
-UPLOAD_FOLDER.mkdir(exist_ok=True)
-GENERATED_CLIPS_FOLDER.mkdir(exist_ok=True)
+UPLOAD_FOLDER.mkdir(parents=True, exist_ok=True)
+GENERATED_CLIPS_FOLDER.mkdir(parents=True, exist_ok=True)
 
 ALLOWED_EXTENSIONS = {"mp4", "mov", "avi", "mkv", "webm", "m4v"}
 
 
-def get_base_url() -> str:
+def get_base_url():
     if BASE_URL:
         return BASE_URL
     return request.url_root.rstrip("/")
 
 
 def get_db():
-    conn = sqlite3.connect(str(DATABASE_PATH))
+    conn = sqlite3.connect(DATABASE_PATH)
     conn.row_factory = sqlite3.Row
     return conn
 
 
 def init_db():
-    conn = get_db()
-    conn.execute(
-        """
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT UNIQUE NOT NULL,
-            email TEXT UNIQUE NOT NULL,
-            password TEXT NOT NULL,
-            verified INTEGER NOT NULL DEFAULT 0,
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    with get_db() as conn:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT UNIQUE NOT NULL,
+                email TEXT UNIQUE NOT NULL,
+                password TEXT NOT NULL,
+                verified INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+            """
         )
-        """
-    )
-    conn.commit()
-    conn.close()
+        conn.commit()
 
 
-def allowed_file(filename: str) -> bool:
+def allowed_file(filename):
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
 
 
@@ -123,6 +132,85 @@ def confirm_token(token):
     return get_serializer().loads(token, salt="email-verify", max_age=86400)
 
 
+def build_public_clip_url(video_folder, filename):
+    return url_for(
+        "download_clip",
+        video_folder=video_folder,
+        filename=filename,
+        _external=True,
+    )
+
+
+def format_seconds(seconds):
+    seconds = int(seconds)
+    minutes = seconds // 60
+    remaining_seconds = seconds % 60
+    return f"{minutes:02d}:{remaining_seconds:02d}"
+
+
+def create_real_clips(input_path, clip_limit):
+    clips_data = []
+    video_folder = uuid.uuid4().hex
+    output_folder = os.path.join(app.config["GENERATED_CLIPS_FOLDER"], video_folder)
+    os.makedirs(output_folder, exist_ok=True)
+
+    video = None
+
+    try:
+        video = VideoFileClip(input_path)
+        duration = float(video.duration or 0)
+
+        if duration <= 0:
+            raise ValueError("Uploaded video has no usable duration.")
+
+        segment_length = duration / clip_limit
+
+        for i in range(clip_limit):
+            start_time = round(i * segment_length, 2)
+            end_time = round(min((i + 1) * segment_length, duration), 2)
+
+            if end_time <= start_time:
+                continue
+
+            output_filename = f"clip_{i + 1}.mp4"
+            output_path = os.path.join(output_folder, output_filename)
+
+            subclip = video.subclipped(start_time, end_time)
+            try:
+                write_kwargs = {
+                    "codec": "libx264",
+                    "audio_codec": "aac",
+                    "logger": None,
+                }
+
+                if getattr(video, "fps", None):
+                    write_kwargs["fps"] = video.fps
+
+                subclip.write_videofile(output_path, **write_kwargs)
+            finally:
+                subclip.close()
+
+            clips_data.append(
+                {
+                    "clip_number": i + 1,
+                    "start_time": start_time,
+                    "end_time": end_time,
+                    "start_label": format_seconds(start_time),
+                    "end_label": format_seconds(end_time),
+                    "download_url": build_public_clip_url(video_folder, output_filename),
+                }
+            )
+
+        if not clips_data:
+            raise ValueError("No clips were created from the uploaded video.")
+
+        return clips_data
+
+    finally:
+        if video is not None:
+            video.close()
+
+
 @app.route("/health")
 def health():
     return {"status": "ok"}, 200
@@ -149,23 +237,21 @@ def register():
 
         hashed_password = generate_password_hash(password_raw)
 
-        conn = get_db()
-        existing_user = conn.execute(
-            "SELECT id FROM users WHERE username = ? OR email = ?",
-            (username, email),
-        ).fetchone()
+        with get_db() as conn:
+            existing_user = conn.execute(
+                "SELECT id FROM users WHERE username = ? OR email = ?",
+                (username, email),
+            ).fetchone()
 
-        if existing_user:
-            conn.close()
-            flash("Username or email already exists.")
-            return render_template("register.html")
+            if existing_user:
+                flash("Username or email already exists.")
+                return render_template("register.html")
 
-        conn.execute(
-            "INSERT INTO users (username, email, password, verified) VALUES (?, ?, ?, ?)",
-            (username, email, hashed_password, 0),
-        )
-        conn.commit()
-        conn.close()
+            conn.execute(
+                "INSERT INTO users (username, email, password, verified) VALUES (?, ?, ?, ?)",
+                (username, email, hashed_password, 0),
+            )
+            conn.commit()
 
         token = generate_token(email)
         verify_link = f"{get_base_url()}/verify/{token}"
@@ -204,23 +290,20 @@ def verify(token):
     except BadSignature:
         return "Invalid verification link.", 400
 
-    conn = get_db()
-    user = conn.execute(
-        "SELECT id, verified FROM users WHERE email = ?",
-        (email,),
-    ).fetchone()
+    with get_db() as conn:
+        user = conn.execute(
+            "SELECT id, verified FROM users WHERE email = ?",
+            (email,),
+        ).fetchone()
 
-    if not user:
-        conn.close()
-        return "Account not found.", 404
+        if not user:
+            return "Account not found.", 404
 
-    if user["verified"] == 1:
-        conn.close()
-        return "Email already verified. You can log in.", 200
+        if user["verified"] == 1:
+            return "Email already verified. You can log in.", 200
 
-    conn.execute("UPDATE users SET verified = 1 WHERE email = ?", (email,))
-    conn.commit()
-    conn.close()
+        conn.execute("UPDATE users SET verified = 1 WHERE email = ?", (email,))
+        conn.commit()
 
     return "Email verified! You can now log in.", 200
 
@@ -234,12 +317,11 @@ def resend_verification():
             flash("Email is required.")
             return render_template("resend_verification.html")
 
-        conn = get_db()
-        user = conn.execute(
-            "SELECT username, email, verified FROM users WHERE email = ?",
-            (email,),
-        ).fetchone()
-        conn.close()
+        with get_db() as conn:
+            user = conn.execute(
+                "SELECT username, email, verified FROM users WHERE email = ?",
+                (email,),
+            ).fetchone()
 
         if not user:
             flash("No account found with that email.")
@@ -281,12 +363,11 @@ def login():
         username = request.form.get("username", "").strip()
         password_raw = request.form.get("password", "").strip()
 
-        conn = get_db()
-        user = conn.execute(
-            "SELECT * FROM users WHERE username = ?",
-            (username,),
-        ).fetchone()
-        conn.close()
+        with get_db() as conn:
+            user = conn.execute(
+                "SELECT * FROM users WHERE username = ?",
+                (username,),
+            ).fetchone()
 
         if not user:
             flash("User not found.")
@@ -302,6 +383,7 @@ def login():
 
         session["user"] = user["username"]
         session["user_id"] = user["id"]
+
         return redirect(url_for("home"))
 
     return render_template("login.html")
@@ -346,18 +428,10 @@ def upload():
         unique_prefix = uuid.uuid4().hex[:8]
         stored_name = f"{unique_prefix}_{safe_name}"
         save_path = os.path.join(app.config["UPLOAD_FOLDER"], stored_name)
+
         video.save(save_path)
 
-        clips = []
-        for i in range(1, clip_limit + 1):
-            clips.append(
-                {
-                    "clip_number": i,
-                    "start_time": (i - 1) * 30,
-                    "end_time": i * 30,
-                    "download_url": "#",
-                }
-            )
+        clips = create_real_clips(save_path, clip_limit)
 
         return jsonify(
             {
@@ -381,3 +455,8 @@ def logout():
 
 
 init_db()
+
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port, debug=True)
