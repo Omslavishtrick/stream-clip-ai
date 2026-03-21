@@ -305,7 +305,7 @@ def create_real_clips(input_path, clip_limit):
             try:
                 write_kwargs = {
                     "codec": "libx264",
-                    "audio": False,
+                    "audio": True,
                     "logger": None,
                 }
 
