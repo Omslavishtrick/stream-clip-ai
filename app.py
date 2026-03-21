@@ -148,6 +148,128 @@ def format_seconds(seconds):
     return f"{minutes:02d}:{remaining_seconds:02d}"
 
 
+def merge_overlapping_ranges(ranges, min_gap=1.0):
+    if not ranges:
+        return []
+
+    ranges = sorted(ranges, key=lambda x: x[0])
+    merged = [ranges[0]]
+
+    for start, end, score in ranges[1:]:
+        last_start, last_end, last_score = merged[-1]
+
+        if start <= last_end + min_gap:
+            merged[-1] = (
+                last_start,
+                max(last_end, end),
+                max(last_score, score),
+            )
+        else:
+            merged.append((start, end, score))
+
+    return merged
+
+
+def pick_top_moments(scored_moments, clip_limit, min_spacing=3.0):
+    picked = []
+
+    for moment in sorted(scored_moments, key=lambda x: x["score"], reverse=True):
+        too_close = False
+
+        for chosen in picked:
+            if abs(moment["center"] - chosen["center"]) < min_spacing:
+                too_close = True
+                break
+
+        if not too_close:
+            picked.append(moment)
+
+        if len(picked) >= clip_limit:
+            break
+
+    return sorted(picked, key=lambda x: x["start"])
+
+
+def detect_audio_highlights(video, clip_limit):
+    if video.audio is None:
+        return []
+
+    duration = float(video.duration or 0)
+    if duration <= 0:
+        return []
+
+    window_size = 2.0
+    step_size = 1.0
+    clip_length = 20.0
+
+    scored_moments = []
+    t = 0.0
+
+    while t < duration:
+        window_end = min(t + window_size, duration)
+
+        if window_end <= t:
+            break
+
+        try:
+            audio_window = video.audio.subclipped(t, window_end)
+            sound = audio_window.to_soundarray(fps=11025)
+
+            if len(sound) == 0:
+                energy = 0.0
+            else:
+                # Works for mono or stereo
+                if getattr(sound, "ndim", 1) > 1:
+                    samples = sound.mean(axis=1)
+                else:
+                    samples = sound
+
+                energy = float((samples ** 2).mean() ** 0.5)
+
+            audio_window.close()
+
+        except Exception:
+            energy = 0.0
+
+        center = t + ((window_end - t) / 2.0)
+        start = max(0.0, center - clip_length / 2.0)
+        end = min(duration, center + clip_length / 2.0)
+
+        scored_moments.append(
+            {
+                "start": round(start, 2),
+                "end": round(end, 2),
+                "center": round(center, 2),
+                "score": energy,
+            }
+        )
+
+        t += step_size
+
+    return pick_top_moments(scored_moments, clip_limit)
+
+
+def detect_fallback_highlights(duration, clip_limit):
+    segment_length = duration / clip_limit
+    fallback = []
+
+    for i in range(clip_limit):
+        start_time = round(i * segment_length, 2)
+        end_time = round(min((i + 1) * segment_length, duration), 2)
+
+        if end_time > start_time:
+            fallback.append(
+                {
+                    "start": start_time,
+                    "end": end_time,
+                    "center": round((start_time + end_time) / 2.0, 2),
+                    "score": 0.0,
+                }
+            )
+
+    return fallback
+
+
 def create_real_clips(input_path, clip_limit):
     clips_data = []
     video_folder = uuid.uuid4().hex
@@ -163,16 +285,19 @@ def create_real_clips(input_path, clip_limit):
         if duration <= 0:
             raise ValueError("Uploaded video has no usable duration.")
 
-        segment_length = duration / clip_limit
+        highlights = detect_audio_highlights(video, clip_limit)
 
-        for i in range(clip_limit):
-            start_time = round(i * segment_length, 2)
-            end_time = round(min((i + 1) * segment_length, duration), 2)
+        if not highlights:
+            highlights = detect_fallback_highlights(duration, clip_limit)
+
+        for i, moment in enumerate(highlights, start=1):
+            start_time = moment["start"]
+            end_time = moment["end"]
 
             if end_time <= start_time:
                 continue
 
-            output_filename = f"clip_{i + 1}.mp4"
+            output_filename = f"clip_{i}.mp4"
             output_path = os.path.join(output_folder, output_filename)
 
             subclip = video.subclipped(start_time, end_time)
@@ -194,11 +319,12 @@ def create_real_clips(input_path, clip_limit):
 
             clips_data.append(
                 {
-                    "clip_number": i + 1,
-                    "start_time": start_time,
-                    "end_time": end_time,
+                    "clip_number": i,
+                    "start_time": round(start_time, 2),
+                    "end_time": round(end_time, 2),
                     "start_label": format_seconds(start_time),
                     "end_label": format_seconds(end_time),
+                    "score": round(moment["score"], 6),
                     "download_url": build_public_clip_url(video_folder, output_filename),
                 }
             )
@@ -211,7 +337,6 @@ def create_real_clips(input_path, clip_limit):
     finally:
         if video is not None:
             video.close()
-
 
 @app.route("/health")
 def health():
