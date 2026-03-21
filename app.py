@@ -13,18 +13,23 @@ import sqlite3
 import smtplib
 import os
 import traceback
+import uuid
+from pathlib import Path
 from email.message import EmailMessage
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 
-app = Flask(__name__)
-print("APP FILE LOADED")
+BASE_DIR = Path(__file__).resolve().parent
+UPLOAD_FOLDER = BASE_DIR / "uploads"
+GENERATED_CLIPS_FOLDER = BASE_DIR / "generated_clips"
+DATABASE_PATH = BASE_DIR / "users.db"
 
-# ======================
-# ENVIRONMENT VARIABLES
-# ======================
+app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "change-this-secret-key")
+app.config["UPLOAD_FOLDER"] = str(UPLOAD_FOLDER)
+app.config["GENERATED_CLIPS_FOLDER"] = str(GENERATED_CLIPS_FOLDER)
+app.config["MAX_CONTENT_LENGTH"] = 1024 * 1024 * 1024  # 1 GB
 
 SMTP_HOST = os.environ.get("SMTP_HOST", "smtp.gmail.com")
 SMTP_PORT = int(os.environ.get("SMTP_PORT", "587"))
@@ -32,35 +37,30 @@ SMTP_USERNAME = os.environ.get("SMTP_USERNAME")
 SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD")
 EMAIL_FROM = os.environ.get("EMAIL_FROM", SMTP_USERNAME)
 
-BASE_URL = os.environ.get("BASE_URL", "http://127.0.0.1:5000")
-DATABASE_PATH = os.environ.get("DATABASE_PATH", "users.db")
+BASE_URL = os.environ.get("BASE_URL", "").rstrip("/")
 
-UPLOAD_FOLDER = os.environ.get("UPLOAD_FOLDER", "uploads")
-GENERATED_CLIPS_FOLDER = os.environ.get("GENERATED_CLIPS_FOLDER", "generated_clips")
-MAX_CONTENT_LENGTH = 1024 * 1024 * 1024  # 1 GB max upload size
-
-app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
-app.config["GENERATED_CLIPS_FOLDER"] = GENERATED_CLIPS_FOLDER
-app.config["MAX_CONTENT_LENGTH"] = MAX_CONTENT_LENGTH
-
-os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
-os.makedirs(app.config["GENERATED_CLIPS_FOLDER"], exist_ok=True)
+UPLOAD_FOLDER.mkdir(exist_ok=True)
+GENERATED_CLIPS_FOLDER.mkdir(exist_ok=True)
 
 ALLOWED_EXTENSIONS = {"mp4", "mov", "avi", "mkv", "webm", "m4v"}
 
 
-# ======================
-# DATABASE
-# ======================
+def get_base_url() -> str:
+    if BASE_URL:
+        return BASE_URL
+    return request.url_root.rstrip("/")
+
+
 def get_db():
-    conn = sqlite3.connect(DATABASE_PATH)
+    conn = sqlite3.connect(str(DATABASE_PATH))
     conn.row_factory = sqlite3.Row
     return conn
 
 
 def init_db():
     conn = get_db()
-    conn.execute("""
+    conn.execute(
+        """
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             username TEXT UNIQUE NOT NULL,
@@ -69,19 +69,14 @@ def init_db():
             verified INTEGER NOT NULL DEFAULT 0,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP
         )
-    """)
+        """
+    )
     conn.commit()
     conn.close()
 
 
-# ======================
-# HELPERS
-# ======================
-def allowed_file(filename):
-    if "." not in filename:
-        return False
-    ext = filename.rsplit(".", 1)[1].lower()
-    return ext in ALLOWED_EXTENSIONS
+def allowed_file(filename: str) -> bool:
+    return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
 
 
 def get_user_plan():
@@ -96,17 +91,11 @@ def get_uploads_left_today(plan):
     return 999 if plan == "premium" else 3
 
 
-# ======================
-# EMAIL FUNCTIONS
-# ======================
 def send_email(to_email, subject, body):
     if not SMTP_USERNAME or not SMTP_PASSWORD:
         raise ValueError("SMTP settings missing. Set SMTP_USERNAME and SMTP_PASSWORD.")
-
     if not EMAIL_FROM:
         raise ValueError("EMAIL_FROM is missing.")
-
-    print("ATTEMPTING TO SEND EMAIL TO:", to_email)
 
     msg = EmailMessage()
     msg["Subject"] = subject
@@ -114,25 +103,14 @@ def send_email(to_email, subject, body):
     msg["To"] = to_email
     msg.set_content(body)
 
-    try:
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=30) as server:
-            server.ehlo()
-            server.starttls()
-            server.ehlo()
-            server.login(SMTP_USERNAME, SMTP_PASSWORD)
-            server.send_message(msg)
-
-        print("EMAIL SENT SUCCESSFULLY")
-
-    except Exception as e:
-        print("SEND_EMAIL ERROR:", str(e))
-        traceback.print_exc()
-        raise
+    with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=30) as server:
+        server.ehlo()
+        server.starttls()
+        server.ehlo()
+        server.login(SMTP_USERNAME, SMTP_PASSWORD)
+        server.send_message(msg)
 
 
-# ======================
-# TOKEN FUNCTIONS
-# ======================
 def get_serializer():
     return URLSafeTimedSerializer(app.secret_key)
 
@@ -145,9 +123,11 @@ def confirm_token(token):
     return get_serializer().loads(token, salt="email-verify", max_age=86400)
 
 
-# ======================
-# ROUTES
-# ======================
+@app.route("/health")
+def health():
+    return {"status": "ok"}, 200
+
+
 @app.route("/")
 def home():
     if "user" in session:
@@ -172,7 +152,7 @@ def register():
         conn = get_db()
         existing_user = conn.execute(
             "SELECT id FROM users WHERE username = ? OR email = ?",
-            (username, email)
+            (username, email),
         ).fetchone()
 
         if existing_user:
@@ -182,14 +162,13 @@ def register():
 
         conn.execute(
             "INSERT INTO users (username, email, password, verified) VALUES (?, ?, ?, ?)",
-            (username, email, hashed_password, 0)
+            (username, email, hashed_password, 0),
         )
         conn.commit()
         conn.close()
 
         token = generate_token(email)
-        verify_link = f"{BASE_URL}/verify/{token}"
-        print("VERIFY LINK:", verify_link)
+        verify_link = f"{get_base_url()}/verify/{token}"
 
         try:
             send_email(
@@ -204,11 +183,10 @@ Click the link below to verify your email:
 {verify_link}
 
 This link expires in 24 hours.
-"""
+""",
             )
             flash("Account created. Check your email to verify your account.")
-        except Exception as e:
-            print("REGISTER EMAIL SEND ERROR:", str(e))
+        except Exception:
             traceback.print_exc()
             flash("Account created, but the verification email could not be sent.")
 
@@ -222,32 +200,29 @@ def verify(token):
     try:
         email = confirm_token(token)
     except SignatureExpired:
-        return "This verification link expired."
+        return "This verification link expired.", 400
     except BadSignature:
-        return "Invalid verification link."
+        return "Invalid verification link.", 400
 
     conn = get_db()
     user = conn.execute(
         "SELECT id, verified FROM users WHERE email = ?",
-        (email,)
+        (email,),
     ).fetchone()
 
     if not user:
         conn.close()
-        return "Account not found."
+        return "Account not found.", 404
 
     if user["verified"] == 1:
         conn.close()
-        return "Email already verified. You can log in."
+        return "Email already verified. You can log in.", 200
 
-    conn.execute(
-        "UPDATE users SET verified = 1 WHERE email = ?",
-        (email,)
-    )
+    conn.execute("UPDATE users SET verified = 1 WHERE email = ?", (email,))
     conn.commit()
     conn.close()
 
-    return "Email verified! You can now log in."
+    return "Email verified! You can now log in.", 200
 
 
 @app.route("/resend-verification", methods=["GET", "POST"])
@@ -262,7 +237,7 @@ def resend_verification():
         conn = get_db()
         user = conn.execute(
             "SELECT username, email, verified FROM users WHERE email = ?",
-            (email,)
+            (email,),
         ).fetchone()
         conn.close()
 
@@ -275,25 +250,23 @@ def resend_verification():
             return redirect(url_for("login"))
 
         token = generate_token(user["email"])
-        verify_link = f"{BASE_URL}/verify/{token}"
-        print("VERIFY LINK:", verify_link)
+        verify_link = f"{get_base_url()}/verify/{token}"
 
         try:
             send_email(
                 user["email"],
                 "Verify your LI3 Media account",
-                f"""Hi {user["username"]},
+                f"""Hi {user['username']},
 
 Click the link below to verify your email:
 
 {verify_link}
 
 This link expires in 24 hours.
-"""
+""",
             )
             flash("Verification email sent.")
-        except Exception as e:
-            print("RESEND EMAIL ERROR:", str(e))
+        except Exception:
             traceback.print_exc()
             flash("Could not send verification email right now.")
 
@@ -311,7 +284,7 @@ def login():
         conn = get_db()
         user = conn.execute(
             "SELECT * FROM users WHERE username = ?",
-            (username,)
+            (username,),
         ).fetchone()
         conn.close()
 
@@ -343,15 +316,13 @@ def download_clip(video_folder, filename):
 @app.route("/upload", methods=["POST"])
 def upload():
     try:
-        print("UPLOAD ROUTE HIT")
-
         if "user" not in session:
             return jsonify({"error": "Please log in first."}), 401
 
         video = request.files.get("video")
         clip_limit_raw = request.form.get("clip_limit", "3")
 
-        if not video or video.filename == "":
+        if not video or not video.filename:
             return jsonify({"error": "No video file selected."}), 400
 
         if not allowed_file(video.filename):
@@ -371,32 +342,34 @@ def upload():
         if clip_limit > allowed_clip_limit:
             return jsonify({"error": f"Your plan allows up to {allowed_clip_limit} clips."}), 400
 
-        filename = secure_filename(video.filename)
-        save_path = os.path.join(app.config["UPLOAD_FOLDER"], filename)
+        safe_name = secure_filename(video.filename)
+        unique_prefix = uuid.uuid4().hex[:8]
+        stored_name = f"{unique_prefix}_{safe_name}"
+        save_path = os.path.join(app.config["UPLOAD_FOLDER"], stored_name)
         video.save(save_path)
-
-        print("UPLOAD SAVED TO:", save_path)
 
         clips = []
         for i in range(1, clip_limit + 1):
-            clips.append({
-                "clip_number": i,
-                "start_time": (i - 1) * 30,
-                "end_time": i * 30,
-                "download_url": "#"
-            })
+            clips.append(
+                {
+                    "clip_number": i,
+                    "start_time": (i - 1) * 30,
+                    "end_time": i * 30,
+                    "download_url": "#",
+                }
+            )
 
-        return jsonify({
-            "plan": plan,
-            "uploads_left_today": get_uploads_left_today(plan),
-            "allowed_clip_limit": allowed_clip_limit,
-            "results": {
-                "clips": clips
+        return jsonify(
+            {
+                "plan": plan,
+                "uploads_left_today": get_uploads_left_today(plan),
+                "allowed_clip_limit": allowed_clip_limit,
+                "uploaded_file": stored_name,
+                "results": {"clips": clips},
             }
-        }), 200
+        ), 200
 
     except Exception as e:
-        print("UPLOAD ERROR:", str(e))
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
@@ -407,16 +380,4 @@ def logout():
     return redirect(url_for("login"))
 
 
-# ======================
-# STARTUP
-# ======================
-try:
-    init_db()
-    print("INIT_DB SUCCESS")
-except Exception as e:
-    print("INIT_DB ERROR:", str(e))
-    raise
-
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
+init_db()
