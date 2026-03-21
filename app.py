@@ -305,17 +305,19 @@ def create_real_clips(input_path, clip_limit):
             try:
                 write_kwargs = {
                     "codec": "libx264",
-                    "audio": True,
+                    "audio": False,  # 🔥 keep OFF to prevent crash
                     "logger": None,
                 }
 
                 if getattr(video, "fps", None):
-                    write_kwargs["fps"] = video.fps
+                     write_kwargs["fps"] = video.fps
 
                 subclip.write_videofile(output_path, **write_kwargs)
 
             finally:
                 subclip.close()
+
+
 
             clips_data.append(
                 {
