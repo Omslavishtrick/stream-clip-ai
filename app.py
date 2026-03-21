@@ -10,6 +10,8 @@ from flask import (
     send_from_directory,
 )
 
+import subprocess
+import imageio_ffmpeg
 import math
 import os
 import smtplib
@@ -269,6 +271,39 @@ def detect_fallback_highlights(duration, clip_limit):
 
     return fallback
 
+def export_clip_with_audio_ffmpeg(input_path, output_path, start_time, end_time):
+    ffmpeg_path = imageio_ffmpeg.get_ffmpeg_exe()
+    duration = round(end_time - start_time, 2)
+
+    if duration <= 0:
+        raise ValueError("Clip duration must be greater than 0.")
+
+    command = [
+        ffmpeg_path,
+        "-y",
+        "-ss", str(start_time),
+        "-i", input_path,
+        "-t", str(duration),
+        "-map", "0:v:0",
+        "-map", "0:a:0?",
+        "-c:v", "libx264",
+        "-c:a", "aac",
+        "-movflags", "+faststart",
+        output_path,
+    ]
+
+    result = subprocess.run(
+        command,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"FFmpeg failed while exporting clip.\nSTDERR:\n{result.stderr}"
+        )
+
 
 def create_real_clips(input_path, clip_limit):
     clips_data = []
@@ -291,8 +326,8 @@ def create_real_clips(input_path, clip_limit):
             highlights = detect_fallback_highlights(duration, clip_limit)
 
         for i, moment in enumerate(highlights, start=1):
-            start_time = moment["start"]
-            end_time = moment["end"]
+            start_time = float(moment["start"])
+            end_time = float(moment["end"])
 
             if end_time <= start_time:
                 continue
@@ -300,24 +335,12 @@ def create_real_clips(input_path, clip_limit):
             output_filename = f"clip_{i}.mp4"
             output_path = os.path.join(output_folder, output_filename)
 
-            subclip = video.subclipped(start_time, end_time)
-
-            try:
-                write_kwargs = {
-                    "codec": "libx264",
-                    "audio": False,  # 🔥 keep OFF to prevent crash
-                    "logger": None,
-                }
-
-                if getattr(video, "fps", None):
-                     write_kwargs["fps"] = video.fps
-
-                subclip.write_videofile(output_path, **write_kwargs)
-
-            finally:
-                subclip.close()
-
-
+            export_clip_with_audio_ffmpeg(
+                input_path=input_path,
+                output_path=output_path,
+                start_time=start_time,
+                end_time=end_time,
+            )
 
             clips_data.append(
                 {
@@ -326,7 +349,7 @@ def create_real_clips(input_path, clip_limit):
                     "end_time": round(end_time, 2),
                     "start_label": format_seconds(start_time),
                     "end_label": format_seconds(end_time),
-                    "score": round(moment["score"], 6),
+                    "score": round(moment.get("score", 0.0), 6),
                     "download_url": build_public_clip_url(video_folder, output_filename),
                 }
             )
