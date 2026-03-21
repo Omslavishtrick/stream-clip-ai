@@ -176,10 +176,11 @@ def create_real_clips(input_path, clip_limit):
             output_path = os.path.join(output_folder, output_filename)
 
             subclip = video.subclipped(start_time, end_time)
+
             try:
                 write_kwargs = {
                     "codec": "libx264",
-                    "audio_codec": "aac",
+                    "audio": False,
                     "logger": None,
                 }
 
@@ -187,6 +188,7 @@ def create_real_clips(input_path, clip_limit):
                     write_kwargs["fps"] = video.fps
 
                 subclip.write_videofile(output_path, **write_kwargs)
+
             finally:
                 subclip.close()
 
