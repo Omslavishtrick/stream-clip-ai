@@ -596,42 +596,7 @@ def download_clip(video_folder, filename):
     folder_path = os.path.join(app.config["GENERATED_CLIPS_FOLDER"], video_folder)
     return send_from_directory(folder_path, filename, as_attachment=True)
 
-@app.route("/upgrade", methods=["POST"])
-def upgrade():
-    if "user_id" not in session:
-        return jsonify({"error": "Please log in first."}), 401
 
-    if not STRIPE_SECRET_KEY or not STRIPE_PRICE_ID:
-        return jsonify({"error": "Stripe is not configured yet."}), 500
-
-    user = get_current_user()
-    if not user:
-        return jsonify({"error": "User not found."}), 404
-
-    try:
-        checkout_session = stripe.checkout.Session.create(
-            mode="subscription",
-            line_items=[
-                {
-                    "price": STRIPE_PRICE_ID,
-                    "quantity": 1,
-                }
-            ],
-            success_url=f"{get_base_url()}/billing/success?session_id={{CHECKOUT_SESSION_ID}}",
-            cancel_url=f"{get_base_url()}/billing/cancel",
-            client_reference_id=str(user["id"]),
-            customer_email=user["email"],
-            metadata={
-                "user_id": str(user["id"]),
-                "username": user["username"],
-            },
-        )
-
-        return jsonify({"checkout_url": checkout_session.url}), 200
-
-    except Exception as e:
-        traceback.print_exc()
-        return jsonify({"error": str(e)}), 500
     
 @app.route("/billing/success")
 def billing_success():
@@ -721,6 +686,42 @@ def stripe_webhook():
 
     return "", 200
 
+@app.route("/upgrade", methods=["POST"])
+def upgrade():
+    if "user_id" not in session:
+        return jsonify({"error": "Please log in first."}), 401
+
+    if not STRIPE_SECRET_KEY or not STRIPE_PRICE_ID:
+        return jsonify({"error": "Stripe is not configured yet."}), 500
+
+    user = get_current_user()
+    if not user:
+        return jsonify({"error": "User not found."}), 404
+
+    try:
+        checkout_session = stripe.checkout.Session.create(
+            mode="subscription",
+            line_items=[
+                {
+                    "price": STRIPE_PRICE_ID,
+                    "quantity": 1,
+                }
+            ],
+            success_url=f"{get_base_url()}/billing/success?session_id={{CHECKOUT_SESSION_ID}}",
+            cancel_url=f"{get_base_url()}/billing/cancel",
+            client_reference_id=str(user["id"]),
+            customer_email=user["email"],
+            metadata={
+                "user_id": str(user["id"]),
+                "username": user["username"],
+            },
+        )
+
+        return jsonify({"checkout_url": checkout_session.url}), 200
+
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
 
 @app.route("/upload", methods=["POST"])
 def upload():
