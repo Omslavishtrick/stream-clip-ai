@@ -6,3 +6,4 @@ moviepy
 numpy
 opencv-python-headless
 imageio-ffmpeg
+stripe
