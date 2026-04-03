@@ -10,6 +10,7 @@ from flask import (
     send_from_directory,
 )
 
+import stripe
 import subprocess
 import imageio_ffmpeg
 import math
@@ -20,6 +21,8 @@ import traceback
 import uuid
 from pathlib import Path
 from email.message import EmailMessage
+from dotenv import load_dotenv
+load_dotenv()
 
 try:
     from moviepy import VideoFileClip
@@ -48,6 +51,13 @@ SMTP_PORT = int(os.environ.get("SMTP_PORT", "587"))
 SMTP_USERNAME = os.environ.get("SMTP_USERNAME")
 SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD")
 EMAIL_FROM = os.environ.get("EMAIL_FROM", SMTP_USERNAME)
+
+STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY")
+STRIPE_PUBLISHABLE_KEY = os.environ.get("STRIPE_PUBLISHABLE_KEY")
+STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET")
+STRIPE_PRICE_ID = os.environ.get("STRIPE_PRICE_ID")
+
+stripe.api_key = STRIPE_SECRET_KEY
 
 BASE_URL = os.environ.get("BASE_URL", "").rstrip("/")
 
@@ -79,10 +89,25 @@ def init_db():
                 email TEXT UNIQUE NOT NULL,
                 password TEXT NOT NULL,
                 verified INTEGER NOT NULL DEFAULT 0,
+                plan TEXT NOT NULL DEFAULT 'free',
+                stripe_customer_id TEXT,
+                stripe_subscription_id TEXT,
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP
             )
             """
         )
+
+        columns = [row["name"] for row in conn.execute("PRAGMA table_info(users)").fetchall()]
+
+        if "plan" not in columns:
+            conn.execute("ALTER TABLE users ADD COLUMN plan TEXT NOT NULL DEFAULT 'free'")
+
+        if "stripe_customer_id" not in columns:
+            conn.execute("ALTER TABLE users ADD COLUMN stripe_customer_id TEXT")
+
+        if "stripe_subscription_id" not in columns:
+            conn.execute("ALTER TABLE users ADD COLUMN stripe_subscription_id TEXT")
+
         conn.commit()
 
 
@@ -91,7 +116,32 @@ def allowed_file(filename):
 
 
 def get_user_plan():
-    return "free"
+    user_id = session.get("user_id")
+    if not user_id:
+        return "free"
+
+    with get_db() as conn:
+        user = conn.execute(
+            "SELECT plan FROM users WHERE id = ?",
+            (user_id,),
+        ).fetchone()
+
+    if not user:
+        return "free"
+
+    return user["plan"] or "free"
+def get_current_user():
+    user_id = session.get("user_id")
+    if not user_id:
+        return None
+
+    with get_db() as conn:
+        user = conn.execute(
+            "SELECT * FROM users WHERE id = ?",
+            (user_id,),
+        ).fetchone()
+
+    return user
 
 
 def get_allowed_clip_limit(plan):
@@ -545,6 +595,131 @@ def login():
 def download_clip(video_folder, filename):
     folder_path = os.path.join(app.config["GENERATED_CLIPS_FOLDER"], video_folder)
     return send_from_directory(folder_path, filename, as_attachment=True)
+
+@app.route("/upgrade", methods=["POST"])
+def upgrade():
+    if "user_id" not in session:
+        return jsonify({"error": "Please log in first."}), 401
+
+    if not STRIPE_SECRET_KEY or not STRIPE_PRICE_ID:
+        return jsonify({"error": "Stripe is not configured yet."}), 500
+
+    user = get_current_user()
+    if not user:
+        return jsonify({"error": "User not found."}), 404
+
+    try:
+        checkout_session = stripe.checkout.Session.create(
+            mode="subscription",
+            line_items=[
+                {
+                    "price": STRIPE_PRICE_ID,
+                    "quantity": 1,
+                }
+            ],
+            success_url=f"{get_base_url()}/billing/success?session_id={{CHECKOUT_SESSION_ID}}",
+            cancel_url=f"{get_base_url()}/billing/cancel",
+            client_reference_id=str(user["id"]),
+            customer_email=user["email"],
+            metadata={
+                "user_id": str(user["id"]),
+                "username": user["username"],
+            },
+        )
+
+        return jsonify({"checkout_url": checkout_session.url}), 200
+
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+    
+@app.route("/billing/success")
+def billing_success():
+    if "user" not in session:
+        return redirect(url_for("login"))
+
+    return render_template("billing_success.html")
+
+
+@app.route("/billing/cancel")
+def billing_cancel():
+    if "user" not in session:
+        return redirect(url_for("login"))
+
+    return render_template("billing_cancel.html")
+
+@app.route("/stripe/webhook", methods=["POST"])
+def stripe_webhook():
+    payload = request.data
+    sig_header = request.headers.get("Stripe-Signature")
+
+    if not STRIPE_WEBHOOK_SECRET:
+        return "Webhook secret not configured.", 500
+
+    try:
+        event = stripe.Webhook.construct_event(
+            payload=payload,
+            sig_header=sig_header,
+            secret=STRIPE_WEBHOOK_SECRET,
+        )
+    except ValueError:
+        return "Invalid payload", 400
+    except stripe.error.SignatureVerificationError:
+        return "Invalid signature", 400
+
+    if event["type"] == "checkout.session.completed":
+        session_obj = event["data"]["object"]
+
+        user_id = session_obj.get("metadata", {}).get("user_id") or session_obj.get("client_reference_id")
+        customer_id = session_obj.get("customer")
+        subscription_id = session_obj.get("subscription")
+
+        if user_id:
+            with get_db() as conn:
+                conn.execute(
+                    """
+                    UPDATE users
+                    SET plan = ?, stripe_customer_id = ?, stripe_subscription_id = ?
+                    WHERE id = ?
+                    """,
+                    ("premium", customer_id, subscription_id, int(user_id)),
+                )
+                conn.commit()
+
+    elif event["type"] == "customer.subscription.deleted":
+        subscription = event["data"]["object"]
+        subscription_id = subscription.get("id")
+
+        with get_db() as conn:
+            conn.execute(
+                """
+                UPDATE users
+                SET plan = 'free', stripe_subscription_id = NULL
+                WHERE stripe_subscription_id = ?
+                """,
+                (subscription_id,),
+            )
+            conn.commit()
+
+    elif event["type"] == "customer.subscription.updated":
+        subscription = event["data"]["object"]
+        subscription_id = subscription.get("id")
+        status = subscription.get("status")
+
+        new_plan = "premium" if status in ("active", "trialing") else "free"
+
+        with get_db() as conn:
+            conn.execute(
+                """
+                UPDATE users
+                SET plan = ?
+                WHERE stripe_subscription_id = ?
+                """,
+                (new_plan, subscription_id),
+            )
+            conn.commit()
+
+    return "", 200
 
 
 @app.route("/upload", methods=["POST"])
