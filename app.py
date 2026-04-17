@@ -35,9 +35,15 @@ from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 
 
 BASE_DIR = Path(__file__).resolve().parent
-UPLOAD_FOLDER = BASE_DIR / "uploads"
-GENERATED_CLIPS_FOLDER = BASE_DIR / "generated_clips"
-DATABASE_PATH = BASE_DIR / "users.db"
+DATA_DIR = Path("/var/data")
+
+UPLOAD_FOLDER = DATA_DIR / "uploads"
+GENERATED_CLIPS_FOLDER = DATA_DIR / "generated_clips"
+DATABASE_PATH = DATA_DIR / "users.db"
+
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+UPLOAD_FOLDER.mkdir(parents=True, exist_ok=True)
+GENERATED_CLIPS_FOLDER.mkdir(parents=True, exist_ok=True)
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "change-this-secret-key")
