@@ -59,10 +59,10 @@
           {% endif %}
         {% endwith %}
         
-    <div>
-    <img src="{{ url_for('static', filename='images/logo.png') }}" width="100">
-    <h2>LI3Media</h2>
-    </div>
+        <div>
+            <img src="{{ url_for('static', filename='images/logo.png') }}" width="100">
+            <h2>LI3Media</h2>
+        </div>
 
         <form method="POST">
             <label>Username</label>
@@ -71,7 +71,13 @@
             <input type="email" name="email" placeholder="Email" required>
 
             <label>Password</label>
-            <input type="password" name="password" required>
+            <div style="position: relative;">
+                <input type="password" id="password" name="password" required style="padding-right: 45px;">
+                <span onclick="togglePassword()" 
+                      style="position: absolute; right: 12px; top: 50%; transform: translateY(-50%); cursor: pointer; color: black;">
+                    👁️
+                </span>
+            </div>
 
             <button type="submit">Create Account</button>
         </form>
@@ -80,5 +86,17 @@
             Already have an account? <a href="/login">Log in</a>
         </p>
     </div>
+
+    <script>
+    function togglePassword() {
+        var passwordField = document.getElementById("password");
+
+        if (passwordField.type === "password") {
+            passwordField.type = "text";
+        } else {
+            passwordField.type = "password";
+        }
+    }
+    </script>
 </body>
 </html>
