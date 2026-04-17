@@ -375,27 +375,6 @@ def detect_audio_highlights(video, clip_limit):
     return pick_top_moments(scored_moments, clip_limit)
 
 
-def detect_fallback_highlights(duration, clip_limit):
-    segment_length = duration / clip_limit
-    fallback = []
-
-    for i in range(clip_limit):
-        start_time = round(i * segment_length, 2)
-        end_time = round(min((i + 1) * segment_length, duration), 2)
-
-        if end_time > start_time:
-            fallback.append(
-                {
-                    "start": start_time,
-                    "end": end_time,
-                    "center": round((start_time + end_time) / 2.0, 2),
-                    "score": 0.0,
-                }
-            )
-
-    return fallback
-
-
 def export_clip_with_audio_ffmpeg(input_path, output_path, start_time, end_time, add_watermark=True):
     ffmpeg_path = imageio_ffmpeg.get_ffmpeg_exe()
     duration = round(end_time - start_time, 2)
@@ -410,18 +389,23 @@ def export_clip_with_audio_ffmpeg(input_path, output_path, start_time, end_time,
         "-y",
         "-ss", str(start_time),
         "-i", input_path,
+        "-t", str(duration),
     ]
 
     if add_watermark:
         command += [
             "-i", logo_path,
-            "-filter_complex", "[0:v][1:v]overlay=W-w-20:H-h-20"
+            "-filter_complex", "[1:v]scale=120:-1[wm];[0:v][wm]overlay=W-w-20:H-h-20[vout]",
+            "-map", "[vout]",
+            "-map", "0:a:0?",
+        ]
+    else:
+        command += [
+            "-map", "0:v:0",
+            "-map", "0:a:0?",
         ]
 
     command += [
-        "-t", str(duration),
-        "-map", "0:v:0",
-        "-map", "0:a:0?",
         "-c:v", "libx264",
         "-c:a", "aac",
         "-movflags", "+faststart",
