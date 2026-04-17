@@ -415,44 +415,11 @@ def export_clip_with_audio_ffmpeg(input_path, output_path, start_time, end_time,
     if add_watermark:
         command += [
             "-i", logo_path,
-            "-filter_complex", "overlay=W-w-20:H-h-20"
+            "-filter_complex", "[0:v][1:v]overlay=W-w-20:H-h-20"
         ]
 
     command += [
         "-t", str(duration),
-        "-map", "0:v:0",
-        "-map", "0:a:0?",
-        "-c:v", "libx264",
-        "-c:a", "aac",
-        "-movflags", "+faststart",
-        output_path,
-    ]
-
-    result = subprocess.run(
-        command,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-    )
-
-    if result.returncode != 0:
-        raise RuntimeError(
-            f"FFmpeg failed while exporting clip.\nSTDERR:\n{result.stderr}"
-        )
-
-    command = [
-        ffmpeg_path,
-        "-y",
-        "-ss", str(start_time),
-        "-i", input_path,
-        "-t", str(duration),
-    ]
-
-    # Add watermark ONLY if needed
-    if add_watermark:
-        command += ["-vf", watermark_filter]
-
-    command += [
         "-map", "0:v:0",
         "-map", "0:a:0?",
         "-c:v", "libx264",
