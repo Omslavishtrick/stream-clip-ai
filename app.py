@@ -403,13 +403,42 @@ def export_clip_with_audio_ffmpeg(input_path, output_path, start_time, end_time,
     if duration <= 0:
         raise ValueError("Clip duration must be greater than 0.")
 
-    # Watermark text filter
-    watermark_filter = (
-        "drawtext=text='Made with Stream Clip AI':"
-        "fontcolor=white:fontsize=24:"
-        "x=w-tw-20:y=h-th-20:"
-        "box=1:boxcolor=black@0.5:boxborderw=5"
+    logo_path = str(BASE_DIR / "static/images/logo.png")
+
+    command = [
+        ffmpeg_path,
+        "-y",
+        "-ss", str(start_time),
+        "-i", input_path,
+    ]
+
+    if add_watermark:
+        command += [
+            "-i", logo_path,
+            "-filter_complex", "overlay=W-w-20:H-h-20"
+        ]
+
+    command += [
+        "-t", str(duration),
+        "-map", "0:v:0",
+        "-map", "0:a:0?",
+        "-c:v", "libx264",
+        "-c:a", "aac",
+        "-movflags", "+faststart",
+        output_path,
+    ]
+
+    result = subprocess.run(
+        command,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
     )
+
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"FFmpeg failed while exporting clip.\nSTDERR:\n{result.stderr}"
+        )
 
     command = [
         ffmpeg_path,
