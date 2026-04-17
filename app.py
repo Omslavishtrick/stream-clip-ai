@@ -45,6 +45,7 @@ app.secret_key = os.environ.get("FLASK_SECRET_KEY", "change-this-secret-key")
 app.config["UPLOAD_FOLDER"] = str(UPLOAD_FOLDER)
 app.config["GENERATED_CLIPS_FOLDER"] = str(GENERATED_CLIPS_FOLDER)
 app.config["MAX_CONTENT_LENGTH"] = 1024 * 1024 * 1024  # 1 GB max upload
+app.config["TEMPLATES_AUTO_RELOAD"] = True
 
 SMTP_HOST = os.environ.get("SMTP_HOST", "smtp.gmail.com")
 SMTP_PORT = int(os.environ.get("SMTP_PORT", "587"))
@@ -130,6 +131,8 @@ def get_user_plan():
         return "free"
 
     return user["plan"] or "free"
+
+
 def get_current_user():
     user_id = session.get("user_id")
     if not user_id:
@@ -152,7 +155,70 @@ def get_uploads_left_today(plan):
     return 999 if plan == "premium" else 3
 
 
-def send_email(to_email, subject, body):
+def build_verification_email_html(username, verification_link):
+    logo_url = f"{get_base_url()}/static/images/logo.png"
+
+    return f"""
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Verify your email</title>
+</head>
+<body style="margin:0; padding:0; background-color:#111827; font-family:Arial, sans-serif;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color:#111827; margin:0; padding:30px 15px;">
+        <tr>
+            <td align="center">
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width:560px; background-color:#1f2937; border-radius:16px; overflow:hidden;">
+                    <tr>
+                        <td align="center" style="padding:32px 32px 16px 32px;">
+                            <img src="{logo_url}" alt="LI3 Media Logo" width="88" style="display:block; margin:0 auto 14px auto;">
+                            <h1 style="margin:0; font-size:28px; line-height:1.2; color:#ffffff;">Verify your email</h1>
+                        </td>
+                    </tr>
+
+                    <tr>
+                        <td style="padding:0 32px 10px 32px; color:#d1d5db; font-size:16px; line-height:1.7;">
+                            <p style="margin:0 0 16px 0;">Hi {username},</p>
+                            <p style="margin:0 0 16px 0;">Thanks for signing up for <strong style="color:#ffffff;">LI3 Media</strong>.</p>
+                            <p style="margin:0 0 24px 0;">Please confirm your email address by clicking the button below.</p>
+                        </td>
+                    </tr>
+
+                    <tr>
+                        <td align="center" style="padding:0 32px 10px 32px;">
+                            <a href="{verification_link}" style="display:inline-block; background-color:#2563eb; color:#ffffff; text-decoration:none; font-size:16px; font-weight:bold; padding:14px 28px; border-radius:10px;">
+                                Verify Account
+                            </a>
+                        </td>
+                    </tr>
+
+                    <tr>
+                        <td style="padding:12px 32px 0 32px; color:#9ca3af; font-size:14px; line-height:1.7;">
+                            <p style="margin:0 0 10px 0;">This verification link expires in 24 hours.</p>
+                            <p style="margin:0 0 10px 0;">If the button does not work, copy and paste this link into your browser:</p>
+                            <p style="margin:0 0 18px 0; word-break:break-all;">
+                                <a href="{verification_link}" style="color:#93c5fd; text-decoration:none;">{verification_link}</a>
+                            </p>
+                        </td>
+                    </tr>
+
+                    <tr>
+                        <td style="padding:0 32px 32px 32px; color:#6b7280; font-size:13px; line-height:1.6;">
+                            <p style="margin:0;">If you did not create this account, you can safely ignore this email.</p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>
+"""
+
+
+def send_email(to_email, subject, body, html_body=None):
     if not SMTP_USERNAME or not SMTP_PASSWORD:
         raise ValueError("SMTP settings missing. Set SMTP_USERNAME and SMTP_PASSWORD.")
     if not EMAIL_FROM:
@@ -163,6 +229,9 @@ def send_email(to_email, subject, body):
     msg["From"] = f"LI3 Media <{EMAIL_FROM}>"
     msg["To"] = to_email
     msg.set_content(body)
+
+    if html_body:
+        msg.add_alternative(html_body, subtype="html")
 
     with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=30) as server:
         server.ehlo()
@@ -270,7 +339,6 @@ def detect_audio_highlights(video, clip_limit):
             if len(sound) == 0:
                 energy = 0.0
             else:
-                # Works for mono or stereo
                 if getattr(sound, "ndim", 1) > 1:
                     samples = sound.mean(axis=1)
                 else:
@@ -320,6 +388,7 @@ def detect_fallback_highlights(duration, clip_limit):
             )
 
     return fallback
+
 
 def export_clip_with_audio_ffmpeg(input_path, output_path, start_time, end_time):
     ffmpeg_path = imageio_ffmpeg.get_ffmpeg_exe()
@@ -413,6 +482,7 @@ def create_real_clips(input_path, clip_limit):
         if video is not None:
             video.close()
 
+
 @app.route("/health")
 def health():
     return {"status": "ok"}, 200
@@ -458,20 +528,26 @@ def register():
         token = generate_token(email)
         verify_link = f"{get_base_url()}/verify/{token}"
 
-        try:
-            send_email(
-                email,
-                "Verify your LI3 Media account",
-                f"""Hi {username},
+        plain_body = f"""Hi {username},
 
-Thanks for signing up.
+Thanks for signing up for LI3 Media.
 
 Click the link below to verify your email:
 
 {verify_link}
 
 This link expires in 24 hours.
-""",
+
+If you did not create this account, you can ignore this email.
+"""
+        html_body = build_verification_email_html(username, verify_link)
+
+        try:
+            send_email(
+                email,
+                "Verify your LI3 Media account",
+                plain_body,
+                html_body=html_body,
             )
             flash("Account created. Check your email to verify your account.")
         except Exception:
@@ -536,18 +612,26 @@ def resend_verification():
         token = generate_token(user["email"])
         verify_link = f"{get_base_url()}/verify/{token}"
 
-        try:
-            send_email(
-                user["email"],
-                "Verify your LI3 Media account",
-                f"""Hi {user['username']},
+        plain_body = f"""Hi {user['username']},
+
+Thanks for signing up for LI3 Media.
 
 Click the link below to verify your email:
 
 {verify_link}
 
 This link expires in 24 hours.
-""",
+
+If you did not create this account, you can ignore this email.
+"""
+        html_body = build_verification_email_html(user["username"], verify_link)
+
+        try:
+            send_email(
+                user["email"],
+                "Verify your LI3 Media account",
+                plain_body,
+                html_body=html_body,
             )
             flash("Verification email sent.")
         except Exception:
@@ -597,7 +681,6 @@ def download_clip(video_folder, filename):
     return send_from_directory(folder_path, filename, as_attachment=True)
 
 
-    
 @app.route("/billing/success")
 def billing_success():
     if "user" not in session:
@@ -612,6 +695,7 @@ def billing_cancel():
         return redirect(url_for("login"))
 
     return render_template("billing_cancel.html")
+
 
 @app.route("/stripe/webhook", methods=["POST"])
 def stripe_webhook():
@@ -686,6 +770,7 @@ def stripe_webhook():
 
     return "", 200
 
+
 @app.route("/upgrade", methods=["POST"])
 def upgrade():
     if "user_id" not in session:
@@ -722,6 +807,7 @@ def upgrade():
     except Exception as e:
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
+
 
 @app.route("/upload", methods=["POST"])
 def upload():
