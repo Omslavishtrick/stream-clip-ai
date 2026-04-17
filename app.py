@@ -396,12 +396,20 @@ def detect_fallback_highlights(duration, clip_limit):
     return fallback
 
 
-def export_clip_with_audio_ffmpeg(input_path, output_path, start_time, end_time):
+def export_clip_with_audio_ffmpeg(input_path, output_path, start_time, end_time, add_watermark=True):
     ffmpeg_path = imageio_ffmpeg.get_ffmpeg_exe()
     duration = round(end_time - start_time, 2)
 
     if duration <= 0:
         raise ValueError("Clip duration must be greater than 0.")
+
+    # Watermark text filter
+    watermark_filter = (
+        "drawtext=text='Made with Stream Clip AI':"
+        "fontcolor=white:fontsize=24:"
+        "x=w-tw-20:y=h-th-20:"
+        "box=1:boxcolor=black@0.5:boxborderw=5"
+    )
 
     command = [
         ffmpeg_path,
@@ -409,6 +417,13 @@ def export_clip_with_audio_ffmpeg(input_path, output_path, start_time, end_time)
         "-ss", str(start_time),
         "-i", input_path,
         "-t", str(duration),
+    ]
+
+    # Add watermark ONLY if needed
+    if add_watermark:
+        command += ["-vf", watermark_filter]
+
+    command += [
         "-map", "0:v:0",
         "-map", "0:a:0?",
         "-c:v", "libx264",
@@ -429,8 +444,7 @@ def export_clip_with_audio_ffmpeg(input_path, output_path, start_time, end_time)
             f"FFmpeg failed while exporting clip.\nSTDERR:\n{result.stderr}"
         )
 
-
-def create_real_clips(input_path, clip_limit):
+def create_real_clips(input_path, clip_limit, plan):
     clips_data = []
     video_folder = uuid.uuid4().hex
     output_folder = os.path.join(app.config["GENERATED_CLIPS_FOLDER"], video_folder)
@@ -465,6 +479,7 @@ def create_real_clips(input_path, clip_limit):
                 output_path=output_path,
                 start_time=start_time,
                 end_time=end_time,
+                add_watermark=(plan != "premium")
             )
 
             clips_data.append(
@@ -876,7 +891,7 @@ def upload():
 
         video.save(save_path)
 
-        clips = create_real_clips(save_path, clip_limit)
+        clips = create_real_clips(save_path, clip_limit, plan)
 
         return jsonify(
             {
