@@ -564,9 +564,19 @@ def verify(token):
     try:
         email = confirm_token(token)
     except SignatureExpired:
-        return "This verification link expired.", 400
+        return render_template(
+            "verify_result.html",
+            status="error",
+            title="Link Expired",
+            message="This verification link has expired. Please request a new verification email.",
+        ), 400
     except BadSignature:
-        return "Invalid verification link.", 400
+        return render_template(
+            "verify_result.html",
+            status="error",
+            title="Invalid Link",
+            message="This verification link is invalid. Please request a new verification email.",
+        ), 400
 
     with get_db() as conn:
         user = conn.execute(
@@ -575,15 +585,30 @@ def verify(token):
         ).fetchone()
 
         if not user:
-            return "Account not found.", 404
+            return render_template(
+                "verify_result.html",
+                status="error",
+                title="Account Not Found",
+                message="We could not find an account for this verification link.",
+            ), 404
 
         if user["verified"] == 1:
-            return "Email already verified. You can log in.", 200
+            return render_template(
+                "verify_result.html",
+                status="success",
+                title="Already Verified",
+                message="Your email is already verified. You can log in to your account now.",
+            ), 200
 
         conn.execute("UPDATE users SET verified = 1 WHERE email = ?", (email,))
         conn.commit()
 
-    return "Email verified! You can now log in.", 200
+    return render_template(
+        "verify_result.html",
+        status="success",
+        title="Email Verified",
+        message="Your email has been verified successfully. You can now log in to your account.",
+    ), 200
 
 
 @app.route("/resend-verification", methods=["GET", "POST"])
