@@ -395,7 +395,9 @@ def export_clip_with_audio_ffmpeg(input_path, output_path, start_time, end_time,
     if add_watermark:
         command += [
             "-i", logo_path,
-            "-filter_complex", "[1:v]scale=120:-1[wm];[0:v][wm]overlay=W-w-20:H-h-20[vout]",
+            "-filter_complex",
+            "[1:v]scale=70:-1,format=rgba,colorchannelmixer=aa=0.45[wm];"
+            "[0:v][wm]overlay=W-w-12:H-h-12[vout]",
             "-map", "[vout]",
             "-map", "0:a:0?",
         ]
