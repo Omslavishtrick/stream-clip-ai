@@ -718,7 +718,7 @@ def stripe_webhook():
         session_obj = event["data"]["object"]
 
         metadata = session_obj.metadata or {}
-        user_id = metadata.get("user_id") or session_obj.client_reference_id
+        user_id = metadata.get("user_id") or session_obj.get("client_reference_id", None)
         customer_id = session_obj.customer
         subscription_id = session_obj.subscription
 
