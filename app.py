@@ -65,6 +65,7 @@ class User(db.Model):
     username = db.Column(db.String(80), unique=True, nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
     password_hash = db.Column(db.String(255), nullable=False)
+    verified = db.Column(db.Boolean, default=False)
     plan = db.Column(db.String(20), default="free")
     uploads_today = db.Column(db.Integer, default=0)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -593,6 +594,7 @@ def verify(token):
             title="Link Expired",
             message="This verification link has expired. Please request a new verification email.",
         ), 400
+
     except BadSignature:
         return render_template(
             "verify_result.html",
@@ -601,30 +603,28 @@ def verify(token):
             message="This verification link is invalid. Please request a new verification email.",
         ), 400
 
-    with get_db() as conn:
-        user = conn.execute(
-            "SELECT id, verified FROM users WHERE email = ?",
-            (email,),
-        ).fetchone()
+    # Look up user in PostgreSQL
+    user = User.query.filter_by(email=email).first()
 
-        if not user:
-            return render_template(
-                "verify_result.html",
-                status="error",
-                title="Account Not Found",
-                message="We could not find an account for this verification link.",
-            ), 404
+    if not user:
+        return render_template(
+            "verify_result.html",
+            status="error",
+            title="Account Not Found",
+            message="We could not find an account for this verification link.",
+        ), 404
 
-        if user["verified"] == 1:
-            return render_template(
-                "verify_result.html",
-                status="success",
-                title="Already Verified",
-                message="Your email is already verified. You can log in to your account now.",
-            ), 200
+    if user.verified:
+        return render_template(
+            "verify_result.html",
+            status="success",
+            title="Already Verified",
+            message="Your email is already verified. You can log in to your account now.",
+        ), 200
 
-        conn.execute("UPDATE users SET verified = 1 WHERE email = ?", (email,))
-        conn.commit()
+    # Mark account as verified
+    user.verified = True
+    db.session.commit()
 
     return render_template(
         "verify_result.html",
