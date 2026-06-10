@@ -16,7 +16,6 @@ import imageio_ffmpeg
 import math
 import os
 import smtplib
-import sqlite3
 import traceback
 import uuid
 from pathlib import Path
@@ -67,6 +66,8 @@ class User(db.Model):
     password_hash = db.Column(db.String(255), nullable=False)
     verified = db.Column(db.Boolean, default=False)
     plan = db.Column(db.String(20), default="free")
+    stripe_customer_id = db.Column(db.String(255))
+    stripe_subscription_id = db.Column(db.String(255))
     uploads_today = db.Column(db.Integer, default=0)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
@@ -100,42 +101,7 @@ def get_base_url():
     return request.url_root.rstrip("/")
 
 
-def get_db():
-    conn = sqlite3.connect(DATABASE_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
 
-
-def init_db():
-    with get_db() as conn:
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS users (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                username TEXT UNIQUE NOT NULL,
-                email TEXT UNIQUE NOT NULL,
-                password TEXT NOT NULL,
-                verified INTEGER NOT NULL DEFAULT 0,
-                plan TEXT NOT NULL DEFAULT 'free',
-                stripe_customer_id TEXT,
-                stripe_subscription_id TEXT,
-                created_at TEXT DEFAULT CURRENT_TIMESTAMP
-            )
-            """
-        )
-
-        columns = [row["name"] for row in conn.execute("PRAGMA table_info(users)").fetchall()]
-
-        if "plan" not in columns:
-            conn.execute("ALTER TABLE users ADD COLUMN plan TEXT NOT NULL DEFAULT 'free'")
-
-        if "stripe_customer_id" not in columns:
-            conn.execute("ALTER TABLE users ADD COLUMN stripe_customer_id TEXT")
-
-        if "stripe_subscription_id" not in columns:
-            conn.execute("ALTER TABLE users ADD COLUMN stripe_subscription_id TEXT")
-
-        conn.commit()
 
 
 def allowed_file(filename):
@@ -147,16 +113,12 @@ def get_user_plan():
     if not user_id:
         return "free"
 
-    with get_db() as conn:
-        user = conn.execute(
-            "SELECT plan FROM users WHERE id = ?",
-            (user_id,),
-        ).fetchone()
+    user = User.query.get(user_id)
 
     if not user:
         return "free"
 
-    return user["plan"] or "free"
+    return user.plan or "free"
 
 
 def get_current_user():
@@ -164,13 +126,7 @@ def get_current_user():
     if not user_id:
         return None
 
-    with get_db() as conn:
-        user = conn.execute(
-            "SELECT * FROM users WHERE id = ?",
-            (user_id,),
-        ).fetchone()
-
-    return user
+    return User.query.get(user_id)
 
 
 def get_allowed_clip_limit(plan):
@@ -643,21 +599,17 @@ def resend_verification():
             flash("Email is required.")
             return render_template("resend_verification.html")
 
-        with get_db() as conn:
-            user = conn.execute(
-                "SELECT username, email, verified FROM users WHERE email = ?",
-                (email,),
-            ).fetchone()
+        user = User.query.filter_by(email=email).first()
 
         if not user:
             flash("No account found with that email.")
             return render_template("resend_verification.html")
 
-        if user["verified"] == 1:
+        if user.verified:
             flash("That email is already verified. Please log in.")
             return redirect(url_for("login"))
 
-        token = generate_token(user["email"])
+        token = generate_token(user.email)
         verify_link = f"{get_base_url()}/verify/{token}"
 
         plain_body = f"""Hi {user['username']},
@@ -770,31 +722,26 @@ def stripe_webhook():
         subscription_id = session_obj.get("subscription")
 
         if user_id:
-            with get_db() as conn:
-                conn.execute(
-                    """
-                    UPDATE users
-                    SET plan = ?, stripe_customer_id = ?, stripe_subscription_id = ?
-                    WHERE id = ?
-                    """,
-                    ("premium", customer_id, subscription_id, int(user_id)),
-                )
-                conn.commit()
+            user = User.query.get(int(user_id))
+
+        if user:
+            user.plan = "premium"
+            user.stripe_customer_id = customer_id
+            user.stripe_subscription_id = subscription_id
+            db.session.commit()
 
     elif event["type"] == "customer.subscription.deleted":
         subscription = event["data"]["object"]
         subscription_id = subscription.get("id")
 
-        with get_db() as conn:
-            conn.execute(
-                """
-                UPDATE users
-                SET plan = 'free', stripe_subscription_id = NULL
-                WHERE stripe_subscription_id = ?
-                """,
-                (subscription_id,),
-            )
-            conn.commit()
+        user = User.query.filter_by(
+        stripe_subscription_id=subscription_id
+        ).first()
+
+    if user:
+        user.plan = "free"
+        user.stripe_subscription_id = None
+        db.session.commit()
 
     elif event["type"] == "customer.subscription.updated":
         subscription = event["data"]["object"]
@@ -803,16 +750,13 @@ def stripe_webhook():
 
         new_plan = "premium" if status in ("active", "trialing") else "free"
 
-        with get_db() as conn:
-            conn.execute(
-                """
-                UPDATE users
-                SET plan = ?
-                WHERE stripe_subscription_id = ?
-                """,
-                (new_plan, subscription_id),
-            )
-            conn.commit()
+        user = User.query.filter_by(
+            stripe_subscription_id=subscription_id
+        ).first()
+
+        if user:
+            user.plan = new_plan
+            db.session.commit()
 
     return "", 200
 
