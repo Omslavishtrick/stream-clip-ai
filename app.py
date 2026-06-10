@@ -697,26 +697,24 @@ def login():
         username = request.form.get("username", "").strip()
         password_raw = request.form.get("password", "").strip()
 
-        with get_db() as conn:
-            user = conn.execute(
-                "SELECT * FROM users WHERE username = ?",
-                (username,),
-            ).fetchone()
+        user = User.query.filter(
+            (User.username == username) | (User.email == username)
+        ).first()
 
         if not user:
             flash("User not found.")
             return render_template("login.html")
 
-        if not check_password_hash(user["password"], password_raw):
+        if not check_password_hash(user.password_hash, password_raw):
             flash("Wrong password.")
             return render_template("login.html")
 
-        if user["verified"] == 0:
+        if not user.verified:
             flash("Please verify your email first.")
             return redirect(url_for("resend_verification"))
 
-        session["user"] = user["username"]
-        session["user_id"] = user["id"]
+        session["user"] = user.username
+        session["user_id"] = user.id
 
         return redirect(url_for("home"))
 
