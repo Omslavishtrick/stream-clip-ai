@@ -531,21 +531,22 @@ def register():
 
         hashed_password = generate_password_hash(password_raw)
 
-        with get_db() as conn:
-            existing_user = conn.execute(
-                "SELECT id FROM users WHERE username = ? OR email = ?",
-                (username, email),
-            ).fetchone()
+        existing_user = User.query.filter(
+            (User.username == username) | (User.email == email)
+        ).first()
 
-            if existing_user:
-                flash("Username or email already exists.")
-                return render_template("register.html")
+        if existing_user:
+            flash("Username or email already exists.")
+            return render_template("register.html")
 
-            conn.execute(
-                "INSERT INTO users (username, email, password, verified) VALUES (?, ?, ?, ?)",
-                (username, email, hashed_password, 0),
-            )
-            conn.commit()
+        new_user = User(
+            username=username,
+            email=email,
+            password_hash=hashed_password,
+        )
+
+        db.session.add(new_user)
+        db.session.commit()
 
         token = generate_token(email)
         verify_link = f"{get_base_url()}/verify/{token}"
