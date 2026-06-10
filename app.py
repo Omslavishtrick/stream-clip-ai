@@ -784,11 +784,11 @@ def upgrade():
             ],
             success_url=f"{get_base_url()}/billing/success?session_id={{CHECKOUT_SESSION_ID}}",
             cancel_url=f"{get_base_url()}/billing/cancel",
-            client_reference_id=str(user["id"]),
-            customer_email=user["email"],
+            client_reference_id=str(user.id),
+            customer_email=user.email,
             metadata={
-                "user_id": str(user["id"]),
-                "username": user["username"],
+                "user_id": str(user.id),
+                "username": user.username,
             },
         )
 
