@@ -717,10 +717,14 @@ def stripe_webhook():
     if event["type"] == "checkout.session.completed":
         session_obj = event["data"]["object"]
 
-        metadata = dict(session_obj["metadata"] or {})
-        user_id = metadata.get("user_id") or session_obj["client_reference_id"]
-        customer_id = session_obj["customer"]
-        subscription_id = session_obj["subscription"]
+        metadata = session_obj.metadata
+        user_id = metadata.user_id if metadata and hasattr(metadata, "user_id") else None
+
+        if not user_id:
+            user_id = session_obj.client_reference_id
+
+        customer_id = session_obj.customer
+        subscription_id = session_obj.subscription
 
         if user_id:
             user = User.query.get(int(user_id))
