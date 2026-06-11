@@ -28,6 +28,8 @@ try:
 except ImportError:
     from moviepy.editor import VideoFileClip
 
+
+from werkzeug.exceptions import RequestEntityTooLarge
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
@@ -51,7 +53,7 @@ app.secret_key = os.environ.get("FLASK_SECRET_KEY", "change-this-secret-key")
 
 app.config["UPLOAD_FOLDER"] = str(UPLOAD_FOLDER)
 app.config["GENERATED_CLIPS_FOLDER"] = str(GENERATED_CLIPS_FOLDER)
-app.config["MAX_CONTENT_LENGTH"] = 1024 * 1024 * 1024  # 1 GB max upload
+app.config["MAX_CONTENT_LENGTH"] = 5 * 1024 * 1024 * 1024  # 5 GB max upload
 app.config["TEMPLATES_AUTO_RELOAD"] = True
 app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get("DATABASE_URL")
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
@@ -198,6 +200,11 @@ def build_verification_email_html(username, verification_link):
 </body>
 </html>
 """
+
+@app.errorhandler(RequestEntityTooLarge)
+def file_too_large(e):
+    flash("Video is too large. Maximum upload size is 5 GB.")
+    return redirect("/")
 
 
 def send_email(to_email, subject, body, html_body=None):
