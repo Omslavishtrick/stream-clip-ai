@@ -1,13 +1,111 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Payment Success</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Payment Successful - LI3 Media</title>
+
+<style>
+body {
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-family: Arial, sans-serif;
+    background: radial-gradient(circle at top, #0f3b8a 0%, #03142f 28%, #020b1c 58%, #01060f 100%);
+    color: white;
+}
+
+.card {
+    width: 90%;
+    max-width: 720px;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.10);
+    border-radius: 24px;
+    padding: 48px;
+    text-align: center;
+}
+
+.check {
+    font-size: 64px;
+    margin-bottom: 18px;
+}
+
+h1 {
+    font-size: 44px;
+    margin: 0 0 12px;
+}
+
+p {
+    color: #cbd5e1;
+    font-size: 18px;
+}
+
+.features {
+    display: flex;
+    gap: 16px;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin: 34px 0;
+}
+
+.feature {
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 16px;
+    padding: 18px 24px;
+    min-width: 150px;
+}
+
+.feature strong {
+    display: block;
+    font-size: 19px;
+    margin-bottom: 6px;
+}
+
+.button {
+    display: inline-block;
+    background: #2563eb;
+    color: white;
+    text-decoration: none;
+    padding: 14px 32px;
+    border-radius: 12px;
+    font-weight: bold;
+}
+
+.button:hover {
+    background: #1d4ed8;
+}
+</style>
 </head>
+
 <body>
-    <h1>Payment successful</h1>
-    <p>Your premium plan is being activated.</p>
-    <a href="/">Back to dashboard</a>
+<div class="card">
+    <div class="check">✅</div>
+
+    <h1>Payment Successful!</h1>
+
+    <p>Your Premium subscription is now active.</p>
+
+    <div class="features">
+        <div class="feature">
+            <strong>20 Clips</strong>
+            Per upload
+        </div>
+
+        <div class="feature">
+            <strong>No Watermark</strong>
+            Clean exports
+        </div>
+
+        <div class="feature">
+            <strong>Premium</strong>
+            Features unlocked
+        </div>
+    </div>
+
+    <a href="/" class="button">Go to Dashboard</a>
+</div>
 </body>
 </html>
