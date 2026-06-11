@@ -733,7 +733,7 @@ def stripe_webhook():
 
     elif event["type"] == "customer.subscription.deleted":
         subscription = event["data"]["object"]
-        subscription_id = subscription.get("id")
+        subscription_id = subscription.id
 
         user = User.query.filter_by(stripe_subscription_id=subscription_id).first()
 
@@ -744,8 +744,8 @@ def stripe_webhook():
 
     elif event["type"] == "customer.subscription.updated":
         subscription = event["data"]["object"]
-        subscription_id = subscription.get("id")
-        status = subscription.get("status")
+        subscription_id = subscription.id
+        status = subscription.status
 
         new_plan = "premium" if status in ("active", "trialing") else "free"
 
