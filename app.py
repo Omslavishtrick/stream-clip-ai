@@ -725,6 +725,12 @@ def stripe_webhook():
 
         customer_id = session_obj.customer
         subscription_id = session_obj.subscription
+        print("=== WEBHOOK DEBUG ===")
+        print("metadata:", metadata)
+        print("user_id:", user_id)
+        print("customer_id:", customer_id)
+        print("subscription_id:", subscription_id)
+        print("====================")
 
         if user_id:
             user = User.query.get(int(user_id))
