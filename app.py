@@ -713,6 +713,13 @@ def billing_manage():
     return redirect(portal_session.url)
 
 
+@app.route("/privacy")
+def privacy():
+    return render_template("privacy.html")
+@app.route("/terms")
+def terms():
+    return render_template("terms.html")
+
 @app.route("/stripe/webhook", methods=["POST"])
 def stripe_webhook():
     payload = request.data
