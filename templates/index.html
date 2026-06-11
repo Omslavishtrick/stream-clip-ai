@@ -522,7 +522,13 @@
 
                 <div class="hero-cta">
                     {% if plan != 'premium' %}
-                        <button id="hero-upgrade-btn" class="button button-primary">Upgrade • Remove Watermark 🚀</button>
+                <button id="hero-upgrade-btn" class="button button-primary">
+                    Upgrade • Remove Watermark 🚀
+                </button>
+                    {% else %}
+                <a href="/billing/manage" class="button button-primary">
+                    Manage Subscription
+                </a>
                     {% endif %}
                     <a href="#upload-section" class="button button-secondary">Start creating clips</a>
                 </div>
