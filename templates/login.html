@@ -1,77 +1,190 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login - Stream Clip AI</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            background: #111827;
-            color: white;
-            margin: 0;
-            padding: 0;
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stream Clip AI - Login</title>
+<style>
+    body {
+        font-family: Arial, sans-serif;
+        background: radial-gradient(circle at top, #0f3b8a 0%, #03142f 35%, #020b1c 100%);
+        color: white;
+        margin: 0;
+        padding: 0;
+    }
+
+    .page {
+        max-width: 1100px;
+        margin: 0 auto;
+        padding: 40px 20px;
+    }
+
+    .hero {
+        display: grid;
+        grid-template-columns: 1.2fr 420px;
+        gap: 32px;
+        align-items: center;
+        min-height: 80vh;
+    }
+
+    .card {
+        background: rgba(31,41,55,0.92);
+        padding: 30px;
+        border-radius: 16px;
+        border: 1px solid rgba(255,255,255,0.08);
+    }
+
+    h1 {
+        font-size: 46px;
+        margin-bottom: 12px;
+    }
+
+    h2 {
+        margin-top: 0;
+    }
+
+    .subtitle {
+        font-size: 18px;
+        color: rgba(255,255,255,0.82);
+        line-height: 1.6;
+    }
+
+    .features {
+        margin-top: 24px;
+        line-height: 1.9;
+    }
+
+    .price {
+        display: inline-block;
+        margin-top: 22px;
+        padding: 14px 18px;
+        border-radius: 12px;
+        background: rgba(37,99,235,0.18);
+        border: 1px solid rgba(96,165,250,0.45);
+        font-weight: bold;
+    }
+
+    input {
+        width: 100%;
+        padding: 12px;
+        margin-top: 8px;
+        margin-bottom: 16px;
+        border: none;
+        border-radius: 10px;
+        box-sizing: border-box;
+    }
+
+    button {
+        width: 100%;
+        padding: 12px;
+        border: none;
+        border-radius: 10px;
+        background: #2563eb;
+        color: white;
+        font-weight: bold;
+        cursor: pointer;
+    }
+
+    button:hover {
+        background: #1d4ed8;
+    }
+
+    a {
+        color: #93c5fd;
+    }
+
+    .flash {
+        background: #7f1d1d;
+        padding: 10px;
+        border-radius: 10px;
+        margin-bottom: 16px;
+    }
+
+    .footer {
+        text-align: center;
+        padding: 24px;
+        color: rgba(255,255,255,0.75);
+        font-size: 14px;
+    }
+
+    .footer a {
+        color: rgba(255,255,255,0.85);
+        text-decoration: none;
+        margin: 0 8px;
+    }
+
+    .footer a:hover {
+        text-decoration: underline;
+    }
+
+    @media (max-width: 850px) {
+        .hero {
+            grid-template-columns: 1fr;
         }
-        .container {
-            max-width: 420px;
-            margin: 80px auto;
-            background: #1f2937;
-            padding: 30px;
-            border-radius: 16px;
+
+        h1 {
+            font-size: 34px;
         }
-        input {
-            width: 100%;
-            padding: 12px;
-            margin-top: 8px;
-            margin-bottom: 16px;
-            border: none;
-            border-radius: 10px;
-            box-sizing: border-box;
-        }
-        button {
-            width: 100%;
-            padding: 12px;
-            border: none;
-            border-radius: 10px;
-            background: #2563eb;
-            color: white;
-            font-weight: bold;
-            cursor: pointer;
-        }
-        a { color: #93c5fd; }
-        .flash {
-            background: #7f1d1d;
-            padding: 10px;
-            border-radius: 10px;
-            margin-bottom: 16px;
-        }
-    </style>
+    }
+</style>
 </head>
+
 <body>
-    <div class="container">
-        <h1>Login</h1>
+<div class="page">
+    <div class="hero">
+        <div>
+            <h1>Stream Clip AI</h1>
+            <p class="subtitle">
+                AI-powered stream clip creation for turning long videos into short,
+                shareable clips faster.
+            </p>
 
-        {% with messages = get_flashed_messages() %}
-          {% if messages %}
-            {% for message in messages %}
-              <div class="flash">{{ message }}</div>
-            {% endfor %}
-          {% endif %}
-        {% endwith %}
+            <div class="features">
+                <p>✅ Upload videos and generate highlight-ready clips</p>
+                <p>✅ Free plan includes up to 3 clips per upload</p>
+                <p>✅ Premium includes up to 20 clips per upload</p>
+                <p>✅ Premium removes watermark from exported clips</p>
+            </div>
 
-        <form method="POST">
-            <label>Username</label>
-            <input type="text" name="username" required>
+            <div class="price">
+                Premium Plan: $14.99/month
+            </div>
+        </div>
 
-            <label>Password</label>
-            <input type="password" name="password" required>
+        <div class="card">
+            <h2>Login</h2>
 
-            <button type="submit">Log In</button>
-        </form>
+            {% with messages = get_flashed_messages() %}
+              {% if messages %}
+                {% for message in messages %}
+                  <div class="flash">{{ message }}</div>
+                {% endfor %}
+              {% endif %}
+            {% endwith %}
 
-        <p style="margin-top:16px;">
-            Need an account? <a href="/register">Create one</a>
-        </p>
+            <form method="POST">
+                <label>Username</label>
+                <input type="text" name="username" required>
+
+                <label>Password</label>
+                <input type="password" name="password" required>
+
+                <button type="submit">Log In</button>
+            </form>
+
+            <p style="margin-top:16px;">
+                Need an account? <a href="/register">Create one</a>
+            </p>
+        </div>
     </div>
+
+    <footer class="footer">
+        <a href="/privacy">Privacy Policy</a>
+        <span>•</span>
+        <a href="/terms">Terms of Service</a>
+        <span>•</span>
+        <span>© 2026 LI3 Media</span>
+    </footer>
+</div>
 </body>
 </html>
