@@ -694,6 +694,24 @@ def billing_cancel():
 
     return render_template("billing_cancel.html")
 
+@app.route("/billing/manage")
+def billing_manage():
+    if "user_id" not in session:
+        return redirect(url_for("login"))
+
+    user = get_current_user()
+
+    if not user or not user.stripe_customer_id:
+        flash("No active billing account found.")
+        return redirect(url_for("home"))
+
+    portal_session = stripe.billing_portal.Session.create(
+        customer=user.stripe_customer_id,
+        return_url=f"{get_base_url()}/",
+    )
+
+    return redirect(portal_session.url)
+
 
 @app.route("/stripe/webhook", methods=["POST"])
 def stripe_webhook():
