@@ -734,12 +734,23 @@ def stripe_webhook():
 
         if user_id:
             user = User.query.get(int(user_id))
+            print("FOUND USER:", user)
+        else:
+            user = None
+            print("USER NOT FOUND")
 
         if user:
+            print("UPGRADING USER TO PREMIUM")
+
             user.plan = "premium"
             user.stripe_customer_id = customer_id
             user.stripe_subscription_id = subscription_id
+
             db.session.commit()
+
+            print("COMMIT COMPLETE")
+        else:
+            print("USER NOT FOUND")
 
     elif event["type"] == "customer.subscription.deleted":
         subscription = event["data"]["object"]
