@@ -53,7 +53,7 @@ app.secret_key = os.environ.get("FLASK_SECRET_KEY", "change-this-secret-key")
 
 app.config["UPLOAD_FOLDER"] = str(UPLOAD_FOLDER)
 app.config["GENERATED_CLIPS_FOLDER"] = str(GENERATED_CLIPS_FOLDER)
-app.config["MAX_CONTENT_LENGTH"] = 5 * 1024 * 1024 * 1024  # 5 GB max upload
+app.config["MAX_CONTENT_LENGTH"] = 1024 * 1024 * 1024  # 1 GB # 1 GB max upload
 app.config["TEMPLATES_AUTO_RELOAD"] = True
 app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get("DATABASE_URL")
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
