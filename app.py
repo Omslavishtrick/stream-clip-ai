@@ -9,6 +9,7 @@ from flask import (
     jsonify,
     send_from_directory,
 )
+import numpy as np
 import json
 import stripe
 import threading
@@ -305,53 +306,77 @@ def detect_audio_highlights(video_path, clip_limit):
     if duration <= 0:
         return []
 
+    sample_rate = 8000
+    seconds_per_chunk = 1
+    chunk_size = sample_rate * seconds_per_chunk * 2
     clip_length = 20.0
 
     command = [
         "ffmpeg",
+        "-v", "error",
         "-i", video_path,
-        "-af", "astats=metadata=1:reset=1",
-        "-f", "null",
-        "-"
+        "-vn",
+        "-ac", "1",
+        "-ar", str(sample_rate),
+        "-f", "s16le",
+        "pipe:1",
     ]
 
-    result = subprocess.run(
+    process = subprocess.Popen(
         command,
         stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True
+        stderr=subprocess.PIPE
     )
 
     scores = []
     current_time = 0.0
 
-    for line in result.stderr.splitlines():
-        if "RMS level dB" in line:
-            try:
-                value = float(line.split(":")[-1].strip())
-            except ValueError:
-                continue
+    while True:
+        chunk = process.stdout.read(chunk_size)
 
-            # Less negative = louder
-            score = value
+        if not chunk:
+            break
 
-            center = current_time
-            start = max(0.0, center - clip_length / 2.0)
-            end = min(duration, center + clip_length / 2.0)
+        samples = np.frombuffer(chunk, dtype=np.int16).astype(np.float32)
 
-            scores.append({
-                "start": round(start, 2),
-                "end": round(end, 2),
-                "center": round(center, 2),
-                "score": score,
-            })
+        if samples.size == 0:
+            continue
 
-            current_time += 1.0
+        samples = samples / 32768.0
+        energy = float(np.sqrt(np.mean(samples ** 2)))
+
+        chunk_duration = samples.size / sample_rate
+        center = current_time + chunk_duration / 2.0
+
+        start = max(0.0, center - clip_length / 2.0)
+        end = min(duration, center + clip_length / 2.0)
+
+        scores.append({
+            "start": round(start, 2),
+            "end": round(end, 2),
+            "center": round(center, 2),
+            "score": energy,
+        })
+
+        current_time += chunk_duration
+
+    process.stdout.close()
+    process.wait()
 
     if not scores:
         return fallback_even_moments(duration, clip_limit)
 
-    return pick_top_moments(scores, clip_limit)
+    selected = pick_top_moments(scores, clip_limit)
+
+    if len(selected) < clip_limit:
+        fallback = fallback_even_moments(duration, clip_limit)
+
+        for moment in fallback:
+            if len(selected) >= clip_limit:
+                break
+            selected.append(moment)
+
+    return selected[:clip_limit]
 
 def get_video_duration(video_path):
     command = [
