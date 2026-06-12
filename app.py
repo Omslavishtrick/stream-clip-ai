@@ -9,7 +9,7 @@ from flask import (
     jsonify,
     send_from_directory,
 )
-
+import json
 import stripe
 import threading
 import subprocess
@@ -299,63 +299,100 @@ def pick_top_moments(scored_moments, clip_limit, min_spacing=3.0):
     return sorted(picked, key=lambda x: x["start"])
 
 
-def detect_audio_highlights(video, clip_limit):
-    if video.audio is None:
-        return []
+def detect_audio_highlights(video_path, clip_limit):
+    duration = get_video_duration(video_path)
 
-    duration = float(video.duration or 0)
     if duration <= 0:
         return []
 
-    window_size = 2.0
-    step_size = 1.0
     clip_length = 20.0
 
-    scored_moments = []
-    t = 0.0
+    command = [
+        "ffmpeg",
+        "-i", video_path,
+        "-af", "astats=metadata=1:reset=1",
+        "-f", "null",
+        "-"
+    ]
 
-    while t < duration:
-        window_end = min(t + window_size, duration)
+    result = subprocess.run(
+        command,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True
+    )
 
-        if window_end <= t:
-            break
+    scores = []
+    current_time = 0.0
 
-        try:
-            audio_window = video.audio.subclipped(t, window_end)
-            sound = audio_window.to_soundarray(fps=11025)
+    for line in result.stderr.splitlines():
+        if "RMS level dB" in line:
+            try:
+                value = float(line.split(":")[-1].strip())
+            except ValueError:
+                continue
 
-            if len(sound) == 0:
-                energy = 0.0
-            else:
-                if getattr(sound, "ndim", 1) > 1:
-                    samples = sound.mean(axis=1)
-                else:
-                    samples = sound
+            # Less negative = louder
+            score = value
 
-                energy = float((samples ** 2).mean() ** 0.5)
+            center = current_time
+            start = max(0.0, center - clip_length / 2.0)
+            end = min(duration, center + clip_length / 2.0)
 
-            audio_window.close()
-
-        except Exception:
-            energy = 0.0
-
-        center = t + ((window_end - t) / 2.0)
-        start = max(0.0, center - clip_length / 2.0)
-        end = min(duration, center + clip_length / 2.0)
-
-        scored_moments.append(
-            {
+            scores.append({
                 "start": round(start, 2),
                 "end": round(end, 2),
                 "center": round(center, 2),
-                "score": energy,
-            }
-        )
+                "score": score,
+            })
 
-        t += step_size
+            current_time += 1.0
 
-    return pick_top_moments(scored_moments, clip_limit)
+    if not scores:
+        return fallback_even_moments(duration, clip_limit)
 
+    return pick_top_moments(scores, clip_limit)
+
+def get_video_duration(video_path):
+    command = [
+        "ffprobe",
+        "-v", "error",
+        "-show_entries", "format=duration",
+        "-of", "json",
+        video_path
+    ]
+
+    result = subprocess.run(
+        command,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True
+    )
+
+    try:
+        data = json.loads(result.stdout)
+        return float(data["format"]["duration"])
+    except Exception:
+        return 0.0
+
+
+def fallback_even_moments(duration, clip_limit):
+    moments = []
+    clip_length = 20.0
+
+    for i in range(clip_limit):
+        center = duration * ((i + 1) / (clip_limit + 1))
+        start = max(0.0, center - clip_length / 2.0)
+        end = min(duration, center + clip_length / 2.0)
+
+        moments.append({
+            "start": round(start, 2),
+            "end": round(end, 2),
+            "center": round(center, 2),
+            "score": 0,
+        })
+
+    return moments
 
 def export_clip_with_audio_ffmpeg(input_path, output_path, start_time, end_time, add_watermark=True):
     ffmpeg_path = imageio_ffmpeg.get_ffmpeg_exe()
@@ -423,7 +460,7 @@ def create_real_clips(input_path, clip_limit, plan):
         if duration <= 0:
             raise ValueError("Uploaded video has no usable duration.")
 
-        highlights = detect_audio_highlights(video, clip_limit)
+        highlights = detect_audio_highlights(input_path, clip_limit)
 
         if not highlights:
             highlights = detect_fallback_highlights(duration, clip_limit)
