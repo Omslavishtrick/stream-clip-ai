@@ -830,22 +830,33 @@ def upgrade():
 
 def process_video_job(job_id, save_path, clip_limit, plan):
     try:
+        print(f"JOB {job_id}: started processing", flush=True)
+
         JOBS[job_id]["status"] = "processing"
 
+        print(f"JOB {job_id}: calling create_real_clips", flush=True)
+
         clips = create_real_clips(save_path, clip_limit, plan)
+
+        print(f"JOB {job_id}: create_real_clips finished", flush=True)
 
         JOBS[job_id]["status"] = "done"
         JOBS[job_id]["clips"] = clips
 
     except Exception as e:
+        print(f"JOB {job_id}: error {e}", flush=True)
+
         JOBS[job_id]["status"] = "error"
         JOBS[job_id]["error"] = str(e)
+
         traceback.print_exc()
 
     finally:
         try:
             if os.path.exists(save_path):
                 os.remove(save_path)
+                print(f"JOB {job_id}: deleted upload", flush=True)
+
         except Exception:
             traceback.print_exc()
 
