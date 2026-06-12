@@ -845,6 +845,19 @@ def upgrade():
             JOBS[job_id]["error"] = str(e)
             traceback.print_exc()
 
+def process_video_job(job_id, save_path, clip_limit, plan):
+    try:
+        JOBS[job_id]["status"] = "processing"
+
+        clips = create_real_clips(save_path, clip_limit, plan)
+
+        JOBS[job_id]["status"] = "done"
+        JOBS[job_id]["clips"] = clips
+
+    except Exception as e:
+        JOBS[job_id]["status"] = "error"
+        JOBS[job_id]["error"] = str(e)
+        traceback.print_exc()
 
 @app.route("/upload", methods=["POST"])
 def upload():
