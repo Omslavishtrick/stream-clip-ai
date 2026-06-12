@@ -834,6 +834,8 @@ def upgrade():
 
             JOBS[job_id]["status"] = "done"
             JOBS[job_id]["clips"] = clips
+            if os.path.exists(save_path):
+                os.remove(save_path)
 
         except Exception as e:
             JOBS[job_id]["status"] = "error"
