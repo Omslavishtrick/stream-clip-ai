@@ -454,13 +454,16 @@ def create_real_clips(input_path, clip_limit, plan):
     video = None
 
     try:
+        print("create_real_clips: loading video", flush=True)
         video = VideoFileClip(input_path)
         duration = float(video.duration or 0)
 
         if duration <= 0:
             raise ValueError("Uploaded video has no usable duration.")
-
+        
+        print("create_real_clips: detecting highlights", flush=True)
         highlights = detect_audio_highlights(input_path, clip_limit)
+        print("create_real_clips: highlights finished", flush=True)
 
         if not highlights:
             highlights = detect_fallback_highlights(duration, clip_limit)
