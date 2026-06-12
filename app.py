@@ -912,15 +912,15 @@ def upload():
     
 @app.route("/job-status/<job_id>", methods=["GET"])
 def job_status(job_id):
-        job = JOBS.get(job_id)
+    job = JOBS.get(job_id)
 
-        if not job:
-            return jsonify({
-                "status": "not_found",
-                "error": "Job not found"
-            }), 404
+    if not job:
+        return jsonify({
+            "status": "not_found",
+            "error": "Job not found"
+        }), 404
 
-        return jsonify(job)
+    return jsonify(job)
 
 
 @app.route("/logout")
