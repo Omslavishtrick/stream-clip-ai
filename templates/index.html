@@ -845,10 +845,10 @@
                 summaryPlan.textContent = formatPlan(job.plan || "{{ plan }}");
 
                 summaryUploads.textContent = job.uploads_left_today
-                ??summaryUploads.textContent;
+                    ??summaryUploads.textContent;
 
                 summaryLimit.textContent = job.allowed_clip_limit
-                ?? summaryLimit.textContent;
+                    ?? summaryLimit.textContent;
 
                 const clips = job.clips || [];
                     renderResults(clips);
