@@ -826,21 +826,7 @@ def upgrade():
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
     
-    def process_video_job(job_id, save_path, clip_limit, plan):
-        try:
-            JOBS[job_id]["status"] = "processing"
-
-            clips = create_real_clips(save_path, clip_limit, plan)
-
-            JOBS[job_id]["status"] = "done"
-            JOBS[job_id]["clips"] = clips
-            if os.path.exists(save_path):
-                os.remove(save_path)
-
-        except Exception as e:
-            JOBS[job_id]["status"] = "error"
-            JOBS[job_id]["error"] = str(e)
-            traceback.print_exc()
+    
 
 def process_video_job(job_id, save_path, clip_limit, plan):
     try:
@@ -855,6 +841,13 @@ def process_video_job(job_id, save_path, clip_limit, plan):
         JOBS[job_id]["status"] = "error"
         JOBS[job_id]["error"] = str(e)
         traceback.print_exc()
+
+    finally:
+        try:
+            if os.path.exists(save_path):
+                os.remove(save_path)
+        except Exception:
+            traceback.print_exc()
 
 @app.route("/upload", methods=["POST"])
 def upload():
