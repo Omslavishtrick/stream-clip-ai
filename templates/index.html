@@ -779,6 +779,25 @@
             sideUpgradeBtn.addEventListener("click", startUpgrade);
         }
 
+
+        async function pollJobStatus(jobId) {
+    while (true) {
+        const response = await fetch(`/job-status/${jobId}`);
+        const job = await response.json();
+
+        if (!response.ok || job.status === "error") {
+            throw new Error(job.error || "Job failed.");
+        }
+
+        if (job.status === "done") {
+            return job;
+        }
+
+        setStatus(`Processing video... Status: ${job.status}`);
+        await new Promise(resolve => setTimeout(resolve, 5000));
+    }
+}
+
         uploadForm.addEventListener("submit", async function (event) {
             event.preventDefault();
 
@@ -817,15 +836,23 @@
                     return;
                 }
 
+                setStatus("Upload complete. Processing video in the background...");
+
+                const job = await pollJobStatus(data.job_id);
+
                 setStatus("Done. Your clips are ready.");
 
-                summaryPlan.textContent = formatPlan(data.plan || "{{ plan }}");
-                summaryUploads.textContent = data.uploads_left_today ?? summaryUploads.textContent;
-                summaryLimit.textContent = data.allowed_clip_limit ?? summaryLimit.textContent;
+                summaryPlan.textContent = formatPlan(job.plan || "{{ plan }}");
 
-                const clips = data.results && data.results.clips ? data.results.clips : [];
-                renderResults(clips);
-            } catch (error) {
+                summaryUploads.textContent = job.uploads_left_today
+                ??summaryUploads.textContent;
+
+                summaryLimit.textContent = job.allowed_clip_limit
+                ?? summaryLimit.textContent;
+
+                const clips = job.clips || [];
+                    renderResults(clips);
+                } catch (error) {
                 setStatus("Something went wrong while processing your upload.");
                 resultsList.innerHTML = `
                     <div class="empty-state">

@@ -11,6 +11,7 @@ from flask import (
 )
 
 import stripe
+import threading
 import subprocess
 import imageio_ffmpeg
 import math
@@ -61,6 +62,8 @@ app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
 db = SQLAlchemy(app)
 bcrypt = Bcrypt(app)
+
+JOBS = {}
 
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -827,6 +830,20 @@ def upgrade():
     except Exception as e:
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
+    
+    def process_video_job(job_id, save_path, clip_limit, plan):
+        try:
+            JOBS[job_id]["status"] = "processing"
+
+            clips = create_real_clips(save_path, clip_limit, plan)
+
+            JOBS[job_id]["status"] = "done"
+            JOBS[job_id]["clips"] = clips
+
+        except Exception as e:
+            JOBS[job_id]["status"] = "error"
+            JOBS[job_id]["error"] = str(e)
+            traceback.print_exc()
 
 
 @app.route("/upload", methods=["POST"])
@@ -865,21 +882,45 @@ def upload():
 
         video.save(save_path)
 
-        clips = create_real_clips(save_path, clip_limit, plan)
+        job_id = str(uuid.uuid4())
 
-        return jsonify(
-            {
-                "plan": plan,
-                "uploads_left_today": get_uploads_left_today(plan),
-                "allowed_clip_limit": allowed_clip_limit,
-                "uploaded_file": stored_name,
-                "results": {"clips": clips},
-            }
-        ), 200
+        JOBS[job_id] = {
+            "status": "queued",
+            "clips": [],
+            "error": None,
+            "plan": plan,
+            "uploads_left_today": get_uploads_left_today(plan),
+            "allowed_clip_limit": allowed_clip_limit,
+            "uploaded_file": stored_name,
+        }
+
+        thread = threading.Thread(
+            target=process_video_job,
+            args=(job_id, save_path, clip_limit, plan),
+            daemon=True
+        )
+        thread.start()
+
+        return jsonify({
+            "job_id": job_id,
+            "status": "queued",
+        }), 202
 
     except Exception as e:
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
+    
+@app.route("/job-status/<job_id>", methods=["GET"])
+def job_status(job_id):
+        job = JOBS.get(job_id)
+
+        if not job:
+            return jsonify({
+                "status": "not_found",
+                "error": "Job not found"
+            }), 404
+
+        return jsonify(job)
 
 
 @app.route("/logout")
