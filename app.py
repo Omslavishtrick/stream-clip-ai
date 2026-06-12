@@ -247,7 +247,7 @@ def confirm_token(token):
 
 
 def build_public_clip_url(video_folder, filename):
-    return f"/download_clip/{video_folder}/{filename}"
+    return f"/clips/{video_folder}/{filename}"
 
 
 def format_seconds(seconds):
