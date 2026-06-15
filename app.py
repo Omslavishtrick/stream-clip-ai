@@ -545,6 +545,14 @@ def home():
         return render_template("index.html", username=session["user"], plan=plan)
     return redirect(url_for("login"))
 
+@app.route("/robots.txt")
+def robots_txt():
+    return app.send_static_file("robots.txt")
+
+
+@app.route("/sitemap.xml")
+def sitemap_xml():
+    return app.send_static_file("sitemap.xml")
 
 @app.route("/register", methods=["GET", "POST"])
 def register():
